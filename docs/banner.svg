@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DM20 Remote — README banner.
+  Original artwork, drawn to match the app's launcher vector drawable
+  (three faders between two rails on a dark card). No third-party assets.
+  Rasterised to docs/banner.png with headless Chrome; see docs/banner.svg.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1280" height="320" viewBox="0 0 1280 320"
+     role="img" aria-label="DM20 Remote — Android remote for the DM20 digital mixer">
+  <title>DM20 Remote</title>
+
+  <!-- Card background -->
+  <rect x="0" y="0" width="1280" height="320" fill="#101418"/>
+
+  <!-- Decorative fader bank (right), kept low-contrast so it reads as texture -->
+  <g fill="#4FC3F7" opacity="0.13">
+    <rect x="901" y="85" width="8" height="150" rx="4"/>
+    <rect x="966" y="85" width="8" height="150" rx="4"/>
+    <rect x="1031" y="85" width="8" height="150" rx="4"/>
+    <rect x="1096" y="85" width="8" height="150" rx="4"/>
+    <rect x="1161" y="85" width="8" height="150" rx="4"/>
+    <rect x="1226" y="85" width="8" height="150" rx="4"/>
+
+    <rect x="885" y="100" width="40" height="12" rx="6"/>
+    <rect x="950" y="160" width="40" height="12" rx="6"/>
+    <rect x="1015" y="120" width="40" height="12" rx="6"/>
+    <rect x="1080" y="185" width="40" height="12" rx="6"/>
+    <rect x="1145" y="135" width="40" height="12" rx="6"/>
+    <rect x="1210" y="110" width="40" height="12" rx="6"/>
+  </g>
+
+  <!-- Launcher glyph: rounded tile + three faders between two rails -->
+  <rect x="64" y="76" width="168" height="168" rx="30" fill="#1A2128" stroke="#2A3239" stroke-width="1"/>
+  <g transform="translate(64,76) scale(1.55556)">
+    <path fill="#4FC3F7" d="M24,28h12v52H24zM46,28h16v52H46zM70,28h12v52H70z"/>
+    <path fill="#EAF1F5" d="M22,20h64v6H22zM22,82h64v6H22z"/>
+  </g>
+
+  <!-- Wordmark + tagline -->
+  <g font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+    <text x="280" y="150" font-size="76" font-weight="700" letter-spacing="0.5" fill="#E9EDF0">DM20 Remote</text>
+    <text x="282" y="198" font-size="27" font-weight="400" fill="#8B9AA6">Android remote for the DM20 digital mixer</text>
+  </g>
+  <rect x="282" y="218" width="132" height="5" rx="2.5" fill="#4FC3F7"/>
+</svg>

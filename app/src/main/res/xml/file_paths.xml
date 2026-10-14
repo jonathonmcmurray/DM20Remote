@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paths the wire-log FileProvider may hand out (see Dm20App / WireLog). -->
+<paths>
+    <external-files-path name="logs" path="logs/" />
+    <files-path name="internal_logs" path="logs/" />
+</paths>

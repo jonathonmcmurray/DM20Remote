@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DM20 Remote</string>
+    <string name="notification_channel_name">Console session</string>
+    <string name="notification_channel_description">Keeps the console connection alive in the background.</string>
+    <string name="notification_title">DM20 Remote</string>
+    <string name="notification_text">Connected to the console</string>
+
+    <string name="connect_title">DM20 Remote</string>
+    <string name="connect_subtitle">Scratch-built controller for the DM20 digital mixer</string>
+    <string name="connect_search">Search for consoles</string>
+    <string name="connect_searching">Searching\u2026</string>
+    <string name="connect_manual">Manual address</string>
+    <string name="connect_connect">Connect</string>
+    <string name="connect_disconnect">Disconnect</string>
+    <string name="connect_none_found">No console responded. Make sure the tablet is joined to the console Wi-Fi.</string>
+    <string name="tab_inputs">Inputs</string>
+    <string name="tab_buses">Buses</string>
+    <string name="tab_info">Console</string>
+    <string name="tab_music">Music</string>
+    <string name="status_offline">Offline</string>
+    <string name="status_online">Online</string>
+
+    <string name="debug_title">Wire log (for debugging)</string>
+    <string name="debug_hint">Records every message sent to and received from the console, plus discovery. Turn it on before connecting \u2014 useful when testing against real hardware. Logs can be shared or saved to Downloads.</string>
+    <string name="debug_open">View wire log</string>
+    <string name="debug_screen_title">Wire log</string>
+    <string name="debug_status_on">Logging \u2192 %1$s</string>
+    <string name="debug_status_on_nofile">Logging (memory only)</string>
+    <string name="debug_status_off">Logging is off</string>
+    <string name="debug_empty">No messages captured yet.</string>
+    <string name="debug_share">Share</string>
+    <string name="debug_save">Save to Downloads</string>
+    <string name="debug_copy">Copy</string>
+    <string name="debug_clear">Clear</string>
+    <string name="debug_close">Close</string>
+    <string name="debug_copied">Log copied to clipboard</string>
+    <string name="debug_saved">Saved to Downloads/%1$s</string>
+    <string name="debug_save_failed">Could not save the log file</string>
+    <string name="debug_no_file">No log file yet \u2014 enable logging first</string>
+
+    <string name="music_none">No media loaded</string>
+    <string name="music_not_connected">Music channel offline \u2014 controls are disabled until it reconnects.</string>
+    <string name="music_record">Record</string>
+    <string name="music_recording">Stop recording</string>
+    <string name="music_play_mode">Play mode</string>
+    <string name="music_list_title">Console music list</string>
+    <string name="music_list_empty">The console has not sent a music list yet.</string>
+    <string name="play_mode_loop">Loop</string>
+    <string name="play_mode_single">Single</string>
+    <string name="play_mode_queue">Queue</string>
+    <string name="play_mode_random">Random</string>
+    <string name="play_mode_once">Once</string>
+</resources>
