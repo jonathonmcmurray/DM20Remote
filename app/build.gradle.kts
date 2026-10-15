@@ -1,10 +1,21 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.protobuf")
+}
+
+// Release signing material is machine-specific and git-ignored. The release
+// build reads it from a local keystore.properties; when that file is absent
+// (a fresh clone, or CI) the release build still runs, just unsigned.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -17,7 +28,18 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.0.1"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -27,6 +49,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
