@@ -144,7 +144,7 @@ protoId) would desynchronise it. The bare delimited layout above is the only sha
 
 **Caveat.** `proccessMediaMusicTimeEvent` throws the parsed value away and swallows parse errors, so
 static analysis fixes the *shape* (`delimited`, no header) while the message *type* is inferred from the
-parse call. Confirming what a real DM20 actually sends is tracked by issue `009` (hardware needed).
+parse call. Confirming what a real DM20 actually sends is tracked by issue #5 (hardware needed).
 
 `PlayCommand` carries `playMode`, `songPath`, `songDuration`, `currentPosition`, `instruction`,
 `isRecord`, `isPlay`, `recordTimeMs` (§6). The same message is used for the control-channel media events
@@ -387,7 +387,7 @@ Any local app can bind and drive the mixer or subscribe to state.
 - ✅ **Music channel framing** — see §3.4: a bare length-delimited `PlayCommand` with **no** magic and
   **no** protoId. Recovered from `AnonymousClass4.channelRead` piped straight into
   `proccessMediaMusicTimeEvent`'s `parseDelimitedFrom`. Because the original discards the parsed value,
-  the *message type* still wants a hardware confirmation (issue `009`).
+  the *message type* still wants a hardware confirmation (issue #5).
 - ✅ **Outbound transport payload** — see §5.3. protoId `192` carries a `PlayCommand` (not the wire model the
   method name suggests), and the `instruction` / `EnmPlayMode` values used by the recorder UI are recovered.
   What a real console sends on the music channel *and* the literal `BusParam4` value still want hardware. 
@@ -398,7 +398,7 @@ Any local app can bind and drive the mixer or subscribe to state.
    bundled sample data is zipped.
 2. **Command acknowledgement semantics** vs. change events (whether `CommandResult` is sent reliably).
 3. **Music-channel payload on real hardware** — §3.4 fixes the *framing* statically; only the message type
-   on `6402` still wants confirmation (issue `009`).
+   on `6402` still wants confirmation (issue #5).
 
 ## 9. How the schema was recovered
 

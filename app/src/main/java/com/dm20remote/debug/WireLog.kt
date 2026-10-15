@@ -25,7 +25,7 @@ enum class Direction(val tag: String) {
 
 /**
  * Opt-in capture of every byte the app sends to and receives from a console,
- * written to a text file so a real-hardware session (issue 009) can be inspected
+ * written to a text file so a real-hardware session (issue #5) can be inspected
  * without `adb logcat`.
  *
  * The object is process-wide and self-contained: it owns its file and a daemon

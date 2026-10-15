@@ -334,7 +334,7 @@ rea inspect-android-method  $APK com.esunny.sound.netty.NettyConnect connect
 **Remaining dives (see `protocol-spec.md` §8)**
 - Confirm the scene import/export file format.
 - ~~Confirm the music-channel (6402) framing.~~ **Done** — a bare delimited `PlayCommand` with no header;
-  see `protocol-spec.md` §3.4. Only the real-console payload type remains for hardware (issue `009`).
+  see `protocol-spec.md` §3.4. Only the real-console payload type remains for hardware (issue #5).
 - ~~Trace the non-standard `SelectedFader` ranges used by dynamics/monitor.~~ **Done** — the ranges are the
   wire values themselves; see `protocol-spec.md` §6.1 and `Units.DynamicsRanges` / `Units.MonitorRanges`.
 
