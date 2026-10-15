@@ -83,7 +83,7 @@ Working today:
   music frame, plus UDP discovery, is timestamped and dumped (hex + decoded protobuf text) to a text
   file that can be shared or saved to Downloads from inside the app — see
   [Capturing a wire log](#capturing-a-wire-log). This is how issue
-  [`009`](issues/009-hardware-verification.md) will be checked against real hardware.
+  [`009`](https://github.com/jonathonmcmurray/DM20Remote/issues/5) will be checked against real hardware.
 - Edge-to-edge rendering (opt-in via `enableEdgeToEdge()` + `safeDrawingPadding()`), so on Android 15+
   the header and strips stay clear of the status bar, gesture bar and landscape display cutouts.
 
@@ -91,7 +91,7 @@ Known gaps (all documented in the protocol spec's "Open questions"):
 
 - Scene recall/select, scene import/export and the library browsers are not built yet.
 - Per-channel bus sends (the eight mix buses + LR) are not surfaced yet — see
-  [`issues/010-bus-sends.md`](issues/010-bus-sends.md).
+  [`010`](https://github.com/jonathonmcmurray/DM20Remote/issues/6).
 - Commands are sent as fire-and-forget; the UI reflects a change when the console mirrors it back.
 
 ## How this was built
@@ -283,7 +283,8 @@ tools/        mock console for testing without hardware
   protobuf schema (57 recovered `.proto` files merged).
 - [`app/src/main/proto/dm20.proto`](app/src/main/proto/dm20.proto) — the cleaned-up schema the app
   actually builds against.
-- [`issues/`](issues/README.md) — the backlog: known gaps and planned work, one Markdown file per issue.
+- [GitHub Issues](https://github.com/jonathonmcmurray/DM20Remote/issues) — the backlog: known gaps and
+  planned work.
 
 ## License
 
