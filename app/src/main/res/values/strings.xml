@@ -22,7 +22,7 @@
     <string name="status_online">Online</string>
 
     <string name="debug_title">Wire log (for debugging)</string>
-    <string name="debug_hint">Records every message sent to and received from the console, plus discovery. Turn it on before connecting \u2014 useful when testing against real hardware. Logs can be shared or saved to Downloads.</string>
+    <string name="debug_hint">Records every message sent to and received from the console, plus discovery. Turn it on before connecting \u2014 useful to verify against real hardware. Logs can be shared or saved to Downloads.</string>
     <string name="debug_open">View wire log</string>
     <string name="debug_screen_title">Wire log</string>
     <string name="debug_status_on">Logging \u2192 %1$s</string>
@@ -51,4 +51,88 @@
     <string name="play_mode_queue">Queue</string>
     <string name="play_mode_random">Random</string>
     <string name="play_mode_once">Once</string>
+
+    <!-- Redesign: shell and navigation -->
+    <string name="nav_mixer">&lt; Mixer</string>
+    <string name="chip_mute">M</string>
+    <string name="chip_solo">S</string>
+    <string name="bank_count">%1$s %2$d\u2013%3$d of %4$d</string>
+    <string name="bank_count_all">%1$s 1\u2013%2$d</string>
+    <string name="level_db">level %1$s dB</string>
+    <string name="header_logs">Logs</string>
+    <string name="music_now_playing">Now playing</string>
+    <string name="music_previous">Previous track</string>
+    <string name="music_play">Play</string>
+    <string name="music_pause">Pause</string>
+    <string name="music_stop">Stop</string>
+    <string name="music_next">Next track</string>
+
+    <!-- Redesign: input detail pages -->
+    <string name="detail_channel">Channel</string>
+    <string name="detail_peq">PEQ</string>
+    <string name="detail_dynamics">Dynamics</string>
+    <string name="section_gain">Gain</string>
+    <string name="section_pan_input">Pan &amp; input</string>
+    <string name="param_fader">Fader</string>
+    <string name="param_pan">Pan</string>
+    <string name="param_trim">Trim</string>
+    <string name="param_48v">48V phantom</string>
+    <string name="param_hpf">High-pass filter</string>
+    <string name="param_freq">Frequency</string>
+    <string name="param_gain">Gain</string>
+    <string name="param_q">Q</string>
+    <string name="param_band">Band</string>
+    <string name="param_type">Type</string>
+    <string name="peq_flat">Flat</string>
+    <string name="param_eq_bypass">EQ bypass</string>
+    <string name="peq_shelving">Shelving filter</string>
+    <string name="peq_band_title">%1$s band</string>
+    <string name="peq_type_bell">bell</string>
+    <string name="peq_type_low_shelf">low shelf</string>
+    <string name="peq_type_high_shelf">high shelf</string>
+    <string name="section_gate">Gate</string>
+    <string name="section_compressor">Compressor</string>
+    <string name="param_gate_threshold">Threshold</string>
+    <string name="param_gate_attack">Attack</string>
+    <string name="param_gate_release">Release</string>
+    <string name="param_gate_hold">Hold</string>
+    <string name="param_gate_depth">Depth</string>
+    <string name="param_compressor_threshold">Threshold</string>
+    <string name="param_compressor_attack">Attack</string>
+    <string name="param_compressor_release">Release</string>
+    <string name="param_compressor_ratio">Ratio</string>
+    <string name="param_compressor_gain">Make-up</string>
+
+    <!-- Redesign: bus detail page -->
+    <string name="section_delay">Delay</string>
+    <string name="param_delay">Delay</string>
+    <string name="param_delay_time">Delay time</string>
+
+    <!-- Redesign: console tab -->
+    <string name="console_serial">Serial</string>
+    <string name="console_firmware">Console firmware</string>
+    <string name="console_dsp">DSP firmware</string>
+    <string name="console_link_control">Control link</string>
+    <string name="console_link_meter">Meter link</string>
+    <string name="console_link_music">Music link</string>
+    <string name="console_meter_frames">Meter frames</string>
+    <string name="console_media">Media</string>
+    <string name="console_playing">Playing</string>
+    <string name="console_scenes">Scenes</string>
+    <string name="console_scene_count">%1$d scenes</string>
+    <string name="console_no_value">\u2014</string>
+    <string name="console_yes">yes</string>
+    <string name="console_no">no</string>
+
+    <!-- Redesign: music tab -->
+    <string name="music_tracks">Tracks</string>
+    <string name="music_no_tracks">The console has not sent a track list yet.</string>
+    <string name="music_no_media">No media loaded</string>
+    <string name="music_transport">Transport</string>
+    <string name="music_position">%1$s / %2$s</string>
+
+    <!-- Redesign: connect screen -->
+    <string name="connect_results">Consoles found</string>
+    <string name="connect_manual_hint">Type the console\'s address</string>
+    <string name="connect_online">Console online</string>
 </resources>
