@@ -25,7 +25,9 @@ The protocol implementation is a self-contained reimplementation of the wire for
 
 ![Connect screen](docs/screenshots/connect.png)
 
-**Inputs** — 12 input strips with live level meters, dB faders, mute and solo:
+**Inputs** — a scrollable bank of the 16 input channels (IN1–IN12, ST1, ST2, USB, SPDIF). Ten are in
+view at a time; the dock at the bottom shows the position in the bank. Each strip carries a live level
+meter, a dB fader, mute and solo:
 
 ![Input mixing surface](docs/screenshots/inputs-mixer.png)
 
@@ -74,10 +76,15 @@ Working today:
   channel is down.
 - Input strips on a landscape mixing surface with per-channel level meter, fader (dB), mute and solo.
 - Bus strips with meter, fader, mute and solo.
-- Input channel detail sheet from the recovered model (pan, 48 V, HPF, trim, gain).
-- Tabbed per-channel editors: **PEQ** (four bands × frequency/gain/Q, bell or shelf shape on the high and
-  low bands) and **dynamics** (gate and compressor). Commands go out on `104`/`106` and the UI updates
-  when the console mirrors them back on `103`/`105`.
+- Input channel detail page from the recovered model (pan, 48 V, HPF, trim, gain). Trim is shown as its
+  wire value plus an enable switch rather than a slider: the scaling of that field was never recovered,
+  so a control for it would be guesswork.
+- Full-width channel pages with **Channel / PEQ / Dynamics** tabs. PEQ is four bands × frequency/gain/Q
+  with a bell or shelf shape on the high and low bands; dynamics are gate and compressor. Commands go
+  out on `104`/`106` and the UI updates when the console mirrors them back on `103`/`105`.
+- One shell and one palette: the console, the connect screen and the wire log are drawn from a single
+  hand-rolled design system, with no Material widgets in the console path. Every screen keeps the same
+  40 dp header, four-way tab switch and palette.
 - Foreground service (`connectedDevice`) that keeps the sockets alive while the app is backgrounded.
 - Opt-in **wire log** for field debugging: enable it on the connection screen and every control/meter/
   music frame, plus UDP discovery, is timestamped and dumped (hex + decoded protobuf text) to a text
@@ -267,7 +274,9 @@ app/src/main/java/com/dm20remote/
   model/      ConsoleState, ConsoleStore, ConsoleSession
   debug/      WireLog, WireLogFormat (opt-in wire capture for field debugging)
   service/    ConsoleService (foreground service)
-  ui/         AppRoot, ConnectScreen, MixerScreen, ChannelStrip, ChannelDetail, PeqEditor, DynamicsEditor, MusicPane, WireLogScreen, ParamControls, components/
+  ui/         AppRoot, ConsoleShell (nav + headers), MixerPane, DetailPane (Channel/PEQ/Dynamics),
+              ConsolePane, MusicPane, ConnectScreen, WireLogScreen, ParamControls,
+              Dm20Design (palette + metrics), Theme, components/ (Dm20Controls, VerticalFader)
   proto/      generated from app/src/main/proto/dm20.proto (protobuf-lite)
   Dm20App     Application entry point (installs the wire log)
 docs/         recovered protocol spec, static-analysis report and the full protobuf schema
