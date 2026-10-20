@@ -455,7 +455,8 @@ Any local app can bind and drive the mixer or subscribe to state.
 
 - ✅ **Field units/scaling** — see §6.1 (fader position↔dB table, PEQ freq/gain/Q, GEQ, delay, display
   units).
-- ✅ **Meter payload encoding** — see §3.3 (80 signed 8-bit dBFS values, fixed slot map, display ranges).
+- ✅ **Meter payload encoding** — see §3.3 (100 signed 8-bit dBFS values in a `MeterLevelData` envelope;
+  80 have a recovered slot map, the trailing 20 are unmapped, fixed slot map, display ranges).
 - ✅ **Fader/gain wire domain** — `GainValue` is a `0…1000` position, not dB.
 - ✅ **Non-standard control ranges (dynamics/monitor).** See §6.1. The `SelectedFader` ranges
   (`100…0.5`, `2000…2`, `12…−12`, `20…1`, …) are simply the **range of the wire value itself**: the
@@ -469,14 +470,21 @@ Any local app can bind and drive the mixer or subscribe to state.
 - ✅ **Outbound transport payload** — see §5.3. protoId `192` carries a `PlayCommand` (not the wire model the
   method name suggests), and the `instruction` / `EnmPlayMode` values used by the recorder UI are recovered.
   What a real console sends on the music channel *and* the literal `BusParam4` value still want hardware. 
+- ✅ **Command acknowledgement** — see §4.1 and §10.1. **There is no `CommandResult` on the wire**: the
+  54-minute hardware capture contains zero occurrences, consistent with there being no handler in the
+  recovered `CmdHandler.processCommand` dispatch. Change events (the odd protoIds) are the only ack, and
+  they are *sparse*. A command that changes nothing is still acknowledged — with a `module_id`-only event.
 
 **Still open (all non-blocking for a basic client):**
 
 1. **Scene import/export file format** (`ImportSceneList`, `Scene_Export`/`Scene_Import`) and whether the
    bundled sample data is zipped.
-2. **Command acknowledgement semantics** vs. change events (whether `CommandResult` is sent reliably).
+2. **Rejected-command behaviour** — whether a command the console refuses stays silent or echoes the old
+   value back. No rejection was observed in the capture, so this still wants hardware (issue #5). Note it
+   is only the *rejection* case that is open; acceptance is settled above.
 3. **Music-channel payload on real hardware** — §3.4 fixes the *framing* statically; only the message type
-   on `6402` still wants confirmation (issue #5).
+   on `6402` still wants confirmation (issue #5). The capture carried **zero** music frames, so this is
+   still entirely unverified.
 
 ## 9. How the schema was recovered
 
@@ -542,8 +550,14 @@ them on the hardware, so each outbound payload is built from the channel's curre
 touched field changed.
 
 **Note the asymmetry with §4.1.** Outbound commands are whole-model; inbound change events are *sparse*.
-The mock console mirrored full models both ways, which is why the emulator exercised the mirroring but
-could never expose the sparse-event defect below.
+
+That asymmetry is exactly why the mock console hid the defect for so long: it echoed whole models and
+sent meters as a bare array, i.e. it reproduced the app's own assumptions rather than the hardware's
+behaviour, so it could only ever pass. A mock that cannot fail on the real shape is not a test. It now
+sends meters in the real shape at the real rate (§3.3) and diffs each command against its stored model
+so it echoes **only the fields that moved** — the same behaviour the desk exhibits, producing all three
+event shapes seen on hardware (2 B `module_id`-only, 4 B mute, 7 B fader). See
+`sparseEcho` in `tools/mock-console.js`.
 
 ### 10.1 Verification against real hardware
 
@@ -572,4 +586,22 @@ console at `192.168.1.81` — validates most of this document and corrects four 
 
 The mock console was corrected to send the real `MeterLevelData` envelope (100 bytes, `0a 64 …`) at the
 real ~6 Hz, so the meter path is now exercised against the shape the hardware actually sends.
+
+#### Re-verification on the emulator (v0.0.3)
+
+Both fixes were re-run end-to-end against the corrected mock, with the app's own wire log as the record:
+
+| Check | Result |
+|---|---|
+| Meter framing | Frame reported as `MeterLevelData 102 B` (`0a 64` + 100 values + varint length) |
+| Meter values | First three slots decoded to `-52 -32 -13`; the mock's generator is `phase = (toggle + i*7) % 40`, and those three solve to phases `3, 10, 17` — a stride of exactly 7, so slot alignment is exact |
+| Meter rate | 924 frames / 157 s = **5.88 Hz**, median inter-frame gap 170 ms — the desk measured ~6 Hz |
+| Sparse echo — mute | Tapping mute sent an 18 B whole-model `110`; the console's `109` was **4 B** (`module_id` + `is_mute_enable`) |
+| Sparse echo — fader | A 1 s drag sent 19 `110` frames (throttle working) while muted; every echo was **7 B** (`module_id` + `out_fader_value`), and all 19 outbound frames still carried `mute=true` |
+| Sparse echo — no-op | Dragging a fader to a value it already held produced **2 B** `109` frames carrying `module_id` alone |
+| Event shapes seen | 2 B ×3, 4 B ×1, 7 B ×16, 18 B ×23 — the 2/4/7 B shapes are all present in the hardware capture too |
+
+The 4 B and 7 B events replayed on the emulator are, byte for byte, the same two shapes that caused the
+reported "mute drops by itself" defect against the desk — so the fix is verified against the failure,
+not merely against a green test suite.
 
