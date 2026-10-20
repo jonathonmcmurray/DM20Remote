@@ -9,13 +9,15 @@
 //   * answers UDP discovery probes (any payload starting with 0x5A) with "OK ..."
 //   * replies to the control-channel init request with a SKDMCData snapshot and
 //     a MusicList (193) of the files on the fake USB stick
-//   * streams 80-slot meter frames at ~10 Hz
+//   * streams 100-byte meter frames (80 mapped slots) at ~6 Hz, the measured
+//     rate and shape of a real console
 //   * streams the music channel as bare delimited PlayCommand frames (no magic,
 //     no protoId) with a playback position that advances while playing
 //   * applies play/pause/stop/select/record/play-mode commands (protoId 192) to
 //     that player and reports the resulting state on 195
 //   * mirrors accepted control changes back on the matching "change event" id
-//     (PEQ 104 -> 103, dynamics 106 -> 105, input 110 -> 109, bus 114 -> 113)
+//     (PEQ 104 -> 103, dynamics 106 -> 105, input 110 -> 109, bus 114 -> 113),
+//     carrying **only the fields that changed** — see `sparseEcho` below
 //
 // From an Android emulator, connect the app to 10.0.2.2 (host loopback).
 // The supported ports and framing are specified in docs/protocol-spec.md.
@@ -84,6 +86,31 @@ function parseFields(buf) {
   return out;
 }
 
+/**
+ * Same walk as `parseFields`, but keeps each field's *raw* tag+value bytes.
+ *
+ * The sparse echo (spec §4.1) needs to compare what a command says against what
+ * the console last knew, byte for byte, and re-emit only the fields that moved.
+ * Re-encoding from decoded values would need a wire type per field; carrying the
+ * original bytes avoids that and keeps floats bit-exact.
+ */
+function parseRawFields(buf) {
+  const out = {};
+  let i = 0;
+  while (i < buf.length) {
+    const start = i;
+    let v; [v, i] = readVarint(buf, i);
+    const field = v >>> 3, wt = v & 7;
+    if (wt === 0) { let val; [val, i] = readVarint(buf, i); }
+    else if (wt === 5) i += 4;
+    else if (wt === 2) { let len; [len, i] = readVarint(buf, i); i += len; }
+    else if (wt === 1) i += 8;
+    else throw new Error('bad wire type ' + wt);
+    out[field] = { wt, raw: buf.slice(start, i) };
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- wire framing
 function controlFrame(protoId, payload) {
   const v = varint(payload.length);
@@ -100,6 +127,17 @@ function meterFrame(payload) {
   header.writeInt32BE(0, 2);
   header.writeInt32BE(v.length + payload.length, 6);
   return Buffer.concat([header, v, payload]);
+}
+
+/**
+ * Wraps the meter array in a `MeterLevelData { bytes gainValue = 1; }` message.
+ *
+ * The real console sends a protobuf *message*, not a bare array, so the envelope
+ * (tag `0x0a` + length) has to be here too: an app that skipped it would read
+ * the tag and length as the first two meter values and shift every slot by two.
+ */
+function meterMessage(values) {
+  return msg([bytes(1, values)]);
 }
 
 // ---------------------------------------------------------------- model builders
@@ -197,14 +235,33 @@ const MUSIC_TRACKS = [
 const INPUT_NAMES = ['Vox 1','Vox 2','Gtr L','Gtr R','Bass','Keys L','Keys R','Kick','Snare','OH L','OH R','Talk'];
 const FADERS      = [760, 745, 700, 690, 720, 680, 680, 780, 765, 640, 640, 600];
 
-function buildSnapshot() {
-  const in1 = msg(INPUT_NAMES.slice(0, 8).map((n, i) =>
-    bytes(i + 1, channel(i, n, FADERS[i], i % 2 ? 25 : -25, i === 11, i === 0))));
-  const in2 = msg(INPUT_NAMES.slice(8, 12).map((n, i) =>
-    bytes(i + 1, channel(8 + i, n, FADERS[8 + i], 0, false, false))));
+// The console's stored model, one entry per module. The snapshot is built from
+// these and the sparse echo diffs against them, so both sides agree by
+// construction — a mock whose echo state drifted from its snapshot would
+// manufacture events the real desk never sends.
+function inputState(i) {
+  return i < 8
+    ? { fader: FADERS[i], pan: i % 2 ? 25 : -25, mute: false, solo: i === 0 }
+    : { fader: FADERS[i], pan: 0, mute: false, solo: false };
+}
+function busState(b) {
+  return { gain: 700 + b * 5, pan: 0, mute: false, solo: false };
+}
 
-  const bus = msg([1,2,3,4,5,6,7,8].map(b =>
-    bytes(b, outBus(b - 1, 'BUS ' + b, 700 + b * 5, 0))));
+function buildSnapshot() {
+  const in1 = msg(INPUT_NAMES.slice(0, 8).map((n, i) => {
+    const s = inputState(i);
+    return bytes(i + 1, channel(i, n, s.fader, s.pan, s.mute, s.solo));
+  }));
+  const in2 = msg(INPUT_NAMES.slice(8, 12).map((n, i) => {
+    const s = inputState(8 + i);
+    return bytes(i + 1, channel(8 + i, n, s.fader, s.pan, s.mute, s.solo));
+  }));
+
+  const bus = msg([1,2,3,4,5,6,7,8].map(b => {
+    const s = busState(b);
+    return bytes(b, outBus(b - 1, 'BUS ' + b, s.gain, s.pan));
+  }));
 
   // SetupInfo holds a selector tag (1) followed by the proto3-agnostic fields.
   const info = msg([
@@ -278,6 +335,60 @@ function applyTransport(fields) {
   }
 }
 
+// ---------------------------------------------------------------- sparse change events
+// Spec §4.1: a real console echoes only the fields that *changed*, not the
+// whole model. The mock used to echo its input back verbatim, which meant it
+// always carried every field and could never reproduce the defect that hid
+// behind that for months — a client replacing its model from a sparse event
+// wipes everything the event left out (reported as "mute drops by itself").
+const echoState = new Map(); // "<echoProtoId>:<moduleId>" -> { field: { wt, raw } }
+
+function seedEcho(echoId, moduleId, model) {
+  echoState.set(echoId + ':' + moduleId, parseRawFields(model));
+}
+function seedEchoState() {
+  for (let i = 0; i < 12; i++) {
+    const s = inputState(i);
+    seedEcho(109, i, outputPart(i, s.fader, s.pan, s.mute, s.solo));
+    seedEcho(103, i, eqPart(i));
+    seedEcho(105, i, dynamicPart(i));
+  }
+  for (let b = 1; b <= 8; b++) {
+    const s = busState(b);
+    seedEcho(113, 127 + b, busOutput(127 + b, s.gain, s.pan, s.mute, s.solo));
+  }
+}
+seedEchoState();
+
+/**
+ * Diffs a command against the stored model and returns the sparse event to echo.
+ *
+ * Rules, all taken from the capture (`wire-20261018-102004.log`):
+ *  - `module_id` rides along on every observed event, changed or not, because an
+ *    event without one decodes as module 0 and would retarget the wrong channel.
+ *  - Anything else is included only when its bytes differ from the stored value.
+ *  - The stored model is updated with everything the command carried, so the
+ *    next diff starts from what the console now believes.
+ */
+function sparseEcho(echoId, moduleId, payload) {
+  const key = echoId + ':' + moduleId;
+  const stored = echoState.get(key);
+  if (!stored) return payload; // unknown module: fall back to mirroring
+  const incoming = parseRawFields(payload);
+  const out = [];
+  for (const f of Object.keys(incoming).sort((a, b) => a - b)) {
+    const prev = stored[f];
+    const now = incoming[f];
+    if (!prev || !prev.raw.equals(now.raw)) out.push(now.raw);
+    stored[f] = now;
+  }
+  const moduleIdField = incoming[1];
+  if (moduleIdField && !out.some((b) => b.equals(moduleIdField.raw))) {
+    out.unshift(moduleIdField.raw);
+  }
+  return Buffer.concat(out);
+}
+
 const controlServer = net.createServer((socket) => {
   console.log('[control] client connected', socket.remoteAddress + ':' + socket.remotePort);
   let pending = Buffer.alloc(0);
@@ -333,11 +444,13 @@ const controlServer = net.createServer((socket) => {
       }
 
       // A real console mirrors accepted changes to the client using the
-      // "change event" id (one below the command id).
+      // "change event" id (one below the command id) — and only the fields
+      // that actually moved (§4.1).
       const echoId = ECHO_IDS[protoId];
       if (echoId) {
-        socket.write(controlFrame(echoId, payload));
-        console.log(`[control] -> echo protoId ${echoId} (${size} bytes)`);
+        const echoPayload = sparseEcho(echoId, fields[1] ?? 0, payload);
+        socket.write(controlFrame(echoId, echoPayload));
+        console.log(`[control] -> echo protoId ${echoId} (${echoPayload.length} B, ${payload.length} B command)`);
       }
     }
   });
@@ -349,7 +462,9 @@ const controlServer = net.createServer((socket) => {
 const meterServer = net.createServer((socket) => {
   console.log('[meter] client connected', socket.remoteAddress + ':' + socket.remotePort);
   const timer = setInterval(() => {
-    const raw = Buffer.alloc(80);
+    // The console reports 100 values; only the first 80 have a recovered slot
+    // map, so the trailing 20 are sent silent (0x80) as on hardware.
+    const raw = Buffer.alloc(100, 0x80);
     for (let i = 0; i < 80; i++) {
       // Slow sine sweep so the bars visibly move; keep it below 0 dBFS.
       const phase = (toggle + i * 7) % 40;
@@ -357,8 +472,9 @@ const meterServer = net.createServer((socket) => {
       raw[i] = Math.max(-120, Math.min(0, Math.round(db))) & 0xff;
     }
     toggle++;
-    socket.write(meterFrame(raw));
-  }, 100);
+    socket.write(meterFrame(meterMessage(raw)));
+    // ~6 Hz: the measured rate of a real console (median inter-frame gap 194 ms).
+  }, 167);
   socket.on('close', () => { clearInterval(timer); console.log('[meter] client disconnected'); });
   socket.on('error', () => clearInterval(timer));
 });

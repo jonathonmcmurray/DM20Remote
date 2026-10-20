@@ -1,5 +1,7 @@
 package com.dm20remote.net
 
+import com.dm20remote.proto.MeterLevelData
+import com.google.protobuf.ByteString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -59,6 +61,49 @@ class MetersTest {
     fun `decode tolerates short payloads`() {
         val decoded = Meters.decodeDb(ByteArray(4) { 0x01 })
         assertEquals(1f, decoded[0], 0f)
+        assertEquals(Meters.SILENT_DB, decoded[79], 0f)
+    }
+
+    /**
+     * Regression for the hardware capture `wire-20261018-102004.log`.
+     *
+     * The console sends a `MeterLevelData` *message*, so the payload begins with
+     * the `0a 64` field tag and length. Decoding the payload as the array itself
+     * read those two bytes as meters 1 and 2 (10 dB and 100 dB) and shifted every
+     * real slot two places right.
+     */
+    @Test
+    fun `unpack strips the protobuf envelope before decoding`() {
+        // First three meter bytes of the captured frame: -78, 0, -90 dB.
+        val values = ByteArray(100) { 0xA6.toByte() }
+        values[0] = 0xB2.toByte() // -78
+        values[1] = 0x00
+        values[2] = 0xA6.toByte() // -90
+
+        val raw = MeterLevelData.newBuilder()
+            .setGainValue(ByteString.copyFrom(values))
+            .build()
+            .toByteArray()
+
+        // The envelope really is on the wire.
+        assertEquals(0x0A, raw[0].toInt() and 0xFF)
+        assertEquals(100, raw[1].toInt() and 0xFF)
+        assertEquals(102, raw.size)
+
+        val decoded = Meters.decodeDb(Meters.unpack(raw))
+        assertEquals(-78f, decoded[0], 0f)
+        assertEquals(0f, decoded[1], 0f)
+        assertEquals(-90f, decoded[2], 0f)
+    }
+
+    @Test
+    fun `unpack keeps the silent floor for the unmapped tail`() {
+        val raw = MeterLevelData.newBuilder()
+            .setGainValue(ByteString.copyFrom(ByteArray(100) { 0x80.toByte() }))
+            .build()
+            .toByteArray()
+        val decoded = Meters.decodeDb(Meters.unpack(raw))
+        assertEquals(Meters.SILENT_DB, decoded[0], 0f)
         assertEquals(Meters.SILENT_DB, decoded[79], 0f)
     }
 

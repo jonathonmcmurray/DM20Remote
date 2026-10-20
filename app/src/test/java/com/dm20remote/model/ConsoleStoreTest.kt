@@ -4,9 +4,11 @@ import com.dm20remote.net.ConsoleEvent
 import com.dm20remote.net.Inbound
 import com.dm20remote.proto.EqPartModel
 import com.dm20remote.proto.MicInDynamicPartModel
+import com.dm20remote.proto.MicInOutputPartModel
 import com.dm20remote.proto.MusicItem
 import com.dm20remote.proto.MusicList
 import com.dm20remote.proto.PlayCommand
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -126,4 +128,88 @@ class ConsoleStoreTest {
         assertEquals(90_000, transport.durationMs)
         assertEquals(5_000, transport.positionMs)
     }
+
+    // ---------------------------------------------------------------- sparse events
+    // The console sends only the fields it changed (protocol spec 4.1). Each case
+    // below uses the exact bytes captured from a real DM20 in
+    // wire-20261018-102004.log, where replacing the stored model with the parsed
+    // event reset every field the event left out.
+
+    @Test
+    fun `the captured sparse frame leaves mute unset`() {
+        val frame = "08052d00800544".hex()
+        val model = MicInOutputPartModel.parseFrom(frame)
+
+        assertEquals(5, model.moduleId)
+        assertFalse(model.hasIsMuteEnable())
+        assertArrayEquals(frame, model.toByteArray())
+    }
+
+    @Test
+    fun `a fader echo does not clear the mute it omitted`() {
+        // 08 05 20 01 2d 00 80 05 44 -> { module_id: 5, is_mute_enable: true, out_fader_value }
+        store.onEvent(
+            ConsoleEvent.Message(
+                Inbound.MicOutputPart(
+                    MicInOutputPartModel.newBuilder()
+                        .setModuleId(5)
+                        .setIsMuteEnable(true)
+                        .setOutFaderValue(546f)
+                        .build(),
+                ),
+            ),
+        )
+        // 08 05 2d 00 80 05 44 -> { module_id: 5, out_fader_value } - mute omitted
+        store.onEvent(
+            ConsoleEvent.Message(
+                Inbound.MicOutputPart(
+                    MicInOutputPartModel.newBuilder()
+                        .setModuleId(5)
+                        .setOutFaderValue(300f)
+                        .build(),
+                ),
+            ),
+        )
+
+        val channel = store.state.value.inputs[5]
+        assertTrue(channel.mute)
+        assertEquals(300f, channel.faderPosition, 0f)
+    }
+
+    @Test
+    fun `an explicit false on the wire clears mute`() {
+        store.onEvent(
+            ConsoleEvent.Message(
+                Inbound.MicOutputPart(
+                    MicInOutputPartModel.newBuilder().setModuleId(2).setIsMuteEnable(true).build(),
+                ),
+            ),
+        )
+        assertTrue(store.state.value.inputs[2].mute)
+
+        val unmute = MicInOutputPartModel.newBuilder().setModuleId(2).setIsMuteEnable(false).build()
+        // Presence is what makes the un-mute representable at all.
+        assertTrue(unmute.hasIsMuteEnable())
+        assertArrayEquals("08022000".hex(), unmute.toByteArray())
+
+        store.onEvent(ConsoleEvent.Message(Inbound.MicOutputPart(unmute)))
+        assertFalse(store.state.value.inputs[2].mute)
+    }
+
+    @Test
+    fun `an event without a module id is dropped rather than applied to channel one`() {
+        val before = store.state.value.inputs.map { it.output }
+
+        // A message that omits module_id decodes as 0, which would retarget IN 1.
+        store.onEvent(
+            ConsoleEvent.Message(
+                Inbound.MicOutputPart(MicInOutputPartModel.newBuilder().setOutFaderValue(777f).build()),
+            ),
+        )
+
+        assertEquals(before, store.state.value.inputs.map { it.output })
+    }
 }
+
+private fun String.hex(): ByteArray =
+    chunked(2).map { it.toInt(16).toByte() }.toByteArray()

@@ -231,7 +231,9 @@ class ConsoleClient(
         try {
             while (scope.isActive) {
                 val payload = Framing.readMeterPayload(input)
-                val db = Meters.decodeDb(payload)
+                // The payload is a `MeterLevelData` message; keep it intact for the
+                // wire log but decode the `gainValue` array out of it.
+                val db = Meters.decodeDb(Meters.unpack(payload))
                 WireLog.meter(payload, db)
                 _events.tryEmit(ConsoleEvent.Meters(db))
             }

@@ -179,6 +179,7 @@ private fun ChannelPage(channel: InputChannel) {
                 value = channel.faderPosition,
                 format = { formatDbUnit(Units.faderPositionToDb(it)) },
                 onCommit = { ConsoleSession.setInputFader(channel, it) },
+                onDrag = { ConsoleSession.setInputFader(channel, it) },
                 height = 46.dp,
             )
             Spacer(Modifier.height(10.dp))
@@ -193,6 +194,7 @@ private fun ChannelPage(channel: InputChannel) {
                 value = panToTravel(channel.pan),
                 format = { formatPan(travelToPan(it)) },
                 onCommit = { ConsoleSession.setInputPan(channel, travelToPan(it)) },
+                onDrag = { ConsoleSession.setInputPan(channel, travelToPan(it)) },
                 detent = true,
                 height = 46.dp,
             )
@@ -300,6 +302,7 @@ private fun PeqPage(channel: InputChannel) {
                 value = Units.PeqRanges.hzToPosition(eq.bandFrequency(band)),
                 format = { formatHz(Units.PeqRanges.positionToHz(it)) },
                 onCommit = { ConsoleSession.setEqBandFrequency(channel, band, Units.PeqRanges.positionToHz(it)) },
+                onDrag = { ConsoleSession.setEqBandFrequency(channel, band, Units.PeqRanges.positionToHz(it)) },
                 height = 44.dp,
             )
             RangeParamRow(
@@ -515,6 +518,7 @@ private fun BusPage(bus: BusChannel) {
                 value = bus.gainPosition,
                 format = { formatDbUnit(Units.faderPositionToDb(it)) },
                 onCommit = { ConsoleSession.setBusFader(bus, it) },
+                onDrag = { ConsoleSession.setBusFader(bus, it) },
                 height = 46.dp,
             )
             Spacer(Modifier.height(10.dp))
@@ -523,6 +527,7 @@ private fun BusPage(bus: BusChannel) {
                 value = panToTravel(bus.pan),
                 format = { formatPan(travelToPan(it)) },
                 onCommit = { ConsoleSession.setBusPan(bus, travelToPan(it)) },
+                onDrag = { ConsoleSession.setBusPan(bus, travelToPan(it)) },
                 detent = true,
                 height = 46.dp,
             )
@@ -597,6 +602,7 @@ private fun RangeParamRow(
         value = range.toPosition(value),
         format = { format(range.fromPosition(it)) },
         onCommit = { onValue(range.fromPosition(it)) },
+        onDrag = { onValue(range.fromPosition(it)) },
         modifier = modifier,
         height = height,
         sliderHeight = sliderHeight,

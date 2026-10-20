@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -20,6 +21,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dm20remote.ui.Dm20Colors
+import com.dm20remote.ui.DRAG_EMIT_NS
 
 /**
  * The vertical fader of one mixer strip.
@@ -30,8 +32,9 @@ import com.dm20remote.ui.Dm20Colors
  * (0..1000), so no conversion happens here.
  *
  * The fader reports continuously while dragging and calls [onCommit] when the
- * gesture ends; the caller sends the command there so the console echo cannot
- * fight the gesture.
+ * gesture ends; the caller sends the command there so the gesture always lands on
+ * the exact value. [onDrag] is the live path — invoked during the gesture and
+ * throttled so a drag does not flood the console with a command per touch sample.
  */
 @Composable
 fun VerticalFader(
@@ -42,9 +45,11 @@ fun VerticalFader(
     railWidth: Dp = 8.dp,
     handleHeight: Dp = 12.dp,
     maxPosition: Float = 1000f,
+    onDrag: (Float) -> Unit = {},
 ) {
     var height by remember { mutableFloatStateOf(1f) }
     val current = rememberUpdatedState(position)
+    var lastDragEmit by remember { mutableLongStateOf(0L) }
 
     Box(
         modifier = modifier
@@ -56,7 +61,13 @@ fun VerticalFader(
                     onDrag = { change, drag ->
                         change.consume()
                         val delta = -drag.y / height * maxPosition
-                        onPositionChange((current.value + delta).coerceIn(0f, maxPosition))
+                        val next = (current.value + delta).coerceIn(0f, maxPosition)
+                        onPositionChange(next)
+                        val now = System.nanoTime()
+                        if (now - lastDragEmit >= DRAG_EMIT_NS) {
+                            lastDragEmit = now
+                            onDrag(next)
+                        }
                     },
                 )
             }

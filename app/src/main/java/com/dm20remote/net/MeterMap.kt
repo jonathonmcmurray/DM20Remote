@@ -1,11 +1,14 @@
 package com.dm20remote.net
 
+import com.dm20remote.proto.MeterLevelData
+
 /**
  * Static meter slot map recovered from the original `MeterListener` bytecode.
  *
- * The console sends a single `MeterLevelData` message carrying an 80-byte array.
- * Byte `i` (1-based meter id `i + 1`) is a sign-extended dBFS value:
- * `0x00` = 0 dBFS, `0x80` = -128 dB (silent floor).
+ * The console sends a single `MeterLevelData` message whose `gainValue` byte array
+ * carries **100** values; the original app only ever addressed the first 80, and
+ * [slots] below is that recovered map. Byte `i` (1-based meter id `i + 1`) is a
+ * sign-extended dBFS value: `0x00` = 0 dBFS, `0x80` = -128 dB (silent floor).
  */
 object Meters {
     enum class Kind { NG_OUT, COMP_OUT, OUT, L_OUT, R_OUT, IN, L_IN, R_IN }
@@ -64,7 +67,18 @@ object Meters {
         }
     }.also { check(it.size == COUNT) { "meter map has ${it.size} slots, expected $COUNT" } }
 
-    /** Decodes the raw 80-byte payload into one dBFS value per slot. */
+    /**
+     * Unwraps a meter frame's payload into the `gainValue` byte array.
+     *
+     * A frame payload is a protobuf *message*, not the array itself: the console
+     * writes `0a <len> <bytes>`, so reading the payload as the array would consume
+     * the field tag and length as the first two meter values (10 dB and 100 dB) and
+     * shift every real slot two places right. Caught on hardware — see
+     * `docs/protocol-spec.md` §3.3.
+     */
+    fun unpack(raw: ByteArray): ByteArray = MeterLevelData.parseFrom(raw).gainValue.toByteArray()
+
+    /** Decodes the 100-byte `gainValue` array into one dBFS value per mapped slot. */
     fun decodeDb(raw: ByteArray): FloatArray {
         val out = FloatArray(COUNT) { SILENT_DB }
         val n = minOf(raw.size, COUNT)

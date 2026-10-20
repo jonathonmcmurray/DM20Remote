@@ -129,9 +129,10 @@ internal fun StripBank(
  * One column of the mixer bank: name plate, meter, fader, dB read-out and the M/S
  * pair.
  *
- * The fader owns its value for the duration of the gesture and only reports it in
- * `onFaderCommit`, so a console echo that arrives mid-drag cannot pull the handle
- * out from under the finger.
+ * The fader owns its value for the duration of the gesture and reports it in
+ * `onFaderDrag` while the gesture runs (throttled) and in `onFaderCommit` when it
+ * ends, so a console echo that arrives mid-drag cannot pull the handle out from
+ * under the finger.
  */
 @Composable
 internal fun MixStrip(
@@ -145,6 +146,7 @@ internal fun MixStrip(
     onMuteToggle: () -> Unit,
     onSoloToggle: () -> Unit,
     onOpen: () -> Unit,
+    onFaderDrag: (Float) -> Unit = {},
 ) {
     var dragging by remember { mutableStateOf(false) }
     var local by remember { mutableFloatStateOf(faderPosition) }
@@ -191,6 +193,7 @@ internal fun MixStrip(
                     dragging = false
                     onFaderCommit(local)
                 },
+                onDrag = onFaderDrag,
                 railWidth = metrics.railWidth,
                 modifier = Modifier
                     .offset(x = metrics.faderOffset)
@@ -402,6 +405,7 @@ internal fun InputsPane(
                 solo = channel.solo,
                 meterDb = state.inputMeterDb(index),
                 onFaderCommit = { ConsoleSession.setInputFader(channel, it) },
+                onFaderDrag = { ConsoleSession.setInputFader(channel, it) },
                 onMuteToggle = { ConsoleSession.setInputMute(channel, !channel.mute) },
                 onSoloToggle = { ConsoleSession.setInputSolo(channel, !channel.solo) },
                 onOpen = { onOpen(index) },
@@ -443,6 +447,7 @@ internal fun BusesPane(
                 solo = bus.solo,
                 meterDb = state.busMeterDb(index),
                 onFaderCommit = { ConsoleSession.setBusFader(bus, it) },
+                onFaderDrag = { ConsoleSession.setBusFader(bus, it) },
                 onMuteToggle = { ConsoleSession.setBusMute(bus, !bus.mute) },
                 onSoloToggle = { ConsoleSession.setBusSolo(bus, !bus.solo) },
                 onOpen = { onOpen(index) },

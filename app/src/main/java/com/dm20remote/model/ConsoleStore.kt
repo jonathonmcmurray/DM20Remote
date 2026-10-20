@@ -5,6 +5,7 @@ import com.dm20remote.net.Inbound
 import com.dm20remote.net.ProtoIds
 import com.dm20remote.proto.PlayCommand
 import com.dm20remote.proto.SKDMCData
+import com.google.protobuf.MessageLite
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,20 +44,45 @@ class ConsoleStore {
         when (inbound) {
             is Inbound.Snapshot -> applySnapshot(inbound.data)
 
-            is Inbound.MicOutputPart ->
-                updateInput(inbound.model.moduleId) { it.copy(output = inbound.model) }
+            // Change events are sparse: the console sends only the fields that
+            // changed (see docs/protocol-spec.md 4.1), so each event is merged
+            // into the stored model rather than replacing it. Replacing would
+            // reset every field the event omitted - mute and solo returning to
+            // false on any unrelated fader change, for instance.
+            is Inbound.MicOutputPart -> {
+                val model = inbound.model
+                if (model.hasModuleId()) {
+                    updateInput(model.moduleId) { it.copy(output = it.output.mergeWith(model)) }
+                }
+            }
 
-            is Inbound.MicInputPart ->
-                updateInput(inbound.model.moduleId) { it.copy(input = inbound.model) }
+            is Inbound.MicInputPart -> {
+                val model = inbound.model
+                if (model.hasModuleId()) {
+                    updateInput(model.moduleId) { it.copy(input = it.input.mergeWith(model)) }
+                }
+            }
 
-            is Inbound.MicEqPart ->
-                updateInput(inbound.model.moduleId) { it.copy(eq = inbound.model) }
+            is Inbound.MicEqPart -> {
+                val model = inbound.model
+                if (model.hasModuleId()) {
+                    updateInput(model.moduleId) { it.copy(eq = it.eq.mergeWith(model)) }
+                }
+            }
 
-            is Inbound.MicDynamicPart ->
-                updateInput(inbound.model.moduleId) { it.copy(dynamics = inbound.model) }
+            is Inbound.MicDynamicPart -> {
+                val model = inbound.model
+                if (model.hasModuleId()) {
+                    updateInput(model.moduleId) { it.copy(dynamics = it.dynamics.mergeWith(model)) }
+                }
+            }
 
-            is Inbound.BusOutputPart ->
-                updateBus(inbound.model.moduleId) { it.copy(output = inbound.model) }
+            is Inbound.BusOutputPart -> {
+                val model = inbound.model
+                if (model.hasModuleId()) {
+                    updateBus(model.moduleId) { it.copy(output = it.output.mergeWith(model)) }
+                }
+            }
 
             is Inbound.MediaState -> onTransportFrame(inbound.model)
 
@@ -151,6 +177,20 @@ class ConsoleStore {
             in2.ch9Model, in2.ch10Model, in2.ch11Model, in2.ch12Model,
             in2.st1Model, in2.st2Model, in2.getUSBModel(), in2.getSPDIFModel(),
         )
+    }
+
+    /**
+     * Folds a sparse change event into a stored model.
+     *
+     * The console sends only the fields it changed, and protobuf reports an absent
+     * scalar as its default value, so replacing the stored model with the parsed event
+     * would reset everything the event left out — mute and solo flipping back to false
+     * whenever the fader moved, for instance. `mergeFrom` copies only the fields the
+     * event actually carries, which is exactly the delta the console described.
+     */
+    private fun <T : MessageLite> T.mergeWith(incoming: T): T {
+        @Suppress("UNCHECKED_CAST")
+        return toBuilder().mergeFrom(incoming).build() as T
     }
 
     private fun updateInput(moduleId: Int, transform: (InputChannel) -> InputChannel) {

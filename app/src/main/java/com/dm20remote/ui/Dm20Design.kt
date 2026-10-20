@@ -7,6 +7,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
+ * Minimum spacing between the live updates a fader or slider drag sends to the
+ * console.
+ *
+ * A touch sample arrives per frame, so an unthrottled drag would push ~60 commands
+ * a second. 25 Hz keeps the desk tracking the gesture while leaving headroom for the
+ * console's own ~6 Hz meter stream and its change-event echoes. The gesture's final
+ * value is always sent separately on release, so dropping samples here is safe.
+ */
+internal const val DRAG_EMIT_NS = 40_000_000L
+
+/**
  * Palette of the direction-B redesign.
  *
  * Every value is the exact fill used in the FigCraft mockups

@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.dm20remote.ui.Dm20Colors
 import com.dm20remote.ui.Dm20Metrics
 import com.dm20remote.ui.Dm20Type
+import com.dm20remote.ui.DRAG_EMIT_NS
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -214,8 +216,10 @@ fun SegmentedSwitch(
  *
  * Like the mixer fader it works in the widget's own 0..1000 travel and reports
  * continuously while dragging; the caller sends the command in [onCommit] so the
- * console echo does not fight the gesture. Bipolar parameters pass [detent] so
- * the fill grows out of the centre and a centre mark is drawn.
+ * gesture always ends with the exact value. [onDrag] is the live path: it is
+ * invoked during the gesture, throttled so a drag does not flood the console with
+ * a command per touch sample. Bipolar parameters pass [detent] so the fill grows
+ * out of the centre and a centre mark is drawn.
  */
 @Composable
 fun Dm20Slider(
@@ -226,9 +230,11 @@ fun Dm20Slider(
     detent: Boolean = false,
     enabled: Boolean = true,
     height: Dp = Dm20Metrics.sliderHeight,
+    onDrag: (Float) -> Unit = {},
 ) {
     var width by remember { mutableFloatStateOf(1f) }
     val current = rememberUpdatedState(travel)
+    var lastDragEmit by remember { mutableLongStateOf(0L) }
 
     Box(
         modifier = modifier
@@ -244,7 +250,13 @@ fun Dm20Slider(
                                 onDrag = { change, drag ->
                                     change.consume()
                                     val delta = drag.x / width * 1000f
-                                    onTravelChange((current.value + delta).coerceIn(0f, 1000f))
+                                    val next = (current.value + delta).coerceIn(0f, 1000f)
+                                    onTravelChange(next)
+                                    val now = System.nanoTime()
+                                    if (now - lastDragEmit >= DRAG_EMIT_NS) {
+                                        lastDragEmit = now
+                                        onDrag(next)
+                                    }
                                 },
                             )
                         }
@@ -274,12 +286,12 @@ fun Dm20Slider(
                 cornerRadius = trackR,
             )
 
-            val from = if (detent) size.width / 2f else handleR
-            val fillWidth = abs(x - from)
+            val fillStart = if (detent) size.width / 2f else 0f
+            val fillWidth = abs(x - fillStart)
             if (fillWidth > 0.5f) {
                 drawRoundRect(
                     color = if (enabled) Dm20Colors.primary else Dm20Colors.rail,
-                    topLeft = Offset(min(from, x), cy - trackH / 2f),
+                    topLeft = Offset(min(fillStart, x), cy - trackH / 2f),
                     size = Size(fillWidth, trackH),
                     cornerRadius = trackR,
                 )
@@ -468,6 +480,7 @@ fun ParamRow(
     detent: Boolean = false,
     enabled: Boolean = true,
     labelColor: Color = Dm20Colors.onSurface,
+    onDrag: (Float) -> Unit = {},
 ) {
     var dragging by remember { mutableStateOf(false) }
     var local by remember { mutableFloatStateOf(value) }
@@ -493,6 +506,7 @@ fun ParamRow(
             detent = detent,
             enabled = enabled,
             height = sliderHeight,
+            onDrag = onDrag,
         )
     }
 }

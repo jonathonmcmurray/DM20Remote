@@ -33,20 +33,20 @@ message BusModel {
 
 
 message BusInputModel {
-  int32 moduleId = 1;
+  optional int32 moduleId = 1;
   .com.dm20remote.proto.BusInputItemModel busItem5 = 2;
   .com.dm20remote.proto.BusInputItemModel busItem6 = 3;
   .com.dm20remote.proto.BusInputItemModel busItem7 = 4;
   .com.dm20remote.proto.BusInputItemModel busItem8 = 5;
   .com.dm20remote.proto.BusInputItemModel busItemLR = 6;
-  int32 modul1Value = 7;
-  int32 modul2Value = 8;
-  int32 delay1Value = 9;
-  int32 delay2Value = 10;
-  int32 reverb1Value = 11;
-  int32 reverb2Value = 12;
-  int32 geq1Value = 13;
-  int32 geq2Value = 14;
+  optional int32 modul1Value = 7;
+  optional int32 modul2Value = 8;
+  optional int32 delay1Value = 9;
+  optional int32 delay2Value = 10;
+  optional int32 reverb1Value = 11;
+  optional int32 reverb2Value = 12;
+  optional int32 geq1Value = 13;
+  optional int32 geq2Value = 14;
 }
 
 
@@ -100,14 +100,15 @@ message BusInputSourceItemModel {
 
 
 message BusOutputModel {
-  int32 moduleId = 1;
-  bool isSolo = 2;
-  bool isMute = 3;
-  bool isDelayEnable = 4;
-  float delayValue = 5;
-  float panValue = 6;
-  float gainValue = 7;
-  bool isSum = 8;
+  // Sparse change events (protoId 113) - see MicInOutputPartModel.
+  optional int32 moduleId = 1;
+  optional bool isSolo = 2;
+  optional bool isMute = 3;
+  optional bool isDelayEnable = 4;
+  optional float delayValue = 5;
+  optional float panValue = 6;
+  optional float gainValue = 7;
+  optional bool isSum = 8;
 }
 
 
@@ -390,12 +391,12 @@ message AllData {
 
 
 message MicInBusModel {
-  int32 moduleId = 1;
-  int32 busParamId = 2;
-  bool isBusEnable = 3;
-  bool isPrefader = 4;
-  float gainValue = 5;
-  float panValue = 6;
+  optional int32 moduleId = 1;
+  optional int32 busParamId = 2;
+  optional bool isBusEnable = 3;
+  optional bool isPrefader = 4;
+  optional float gainValue = 5;
+  optional float panValue = 6;
 }
 message MicInBusSendModel {
   int32 moduleId = 1;
@@ -446,44 +447,44 @@ message In2Model {
 
 
 message MicInDynamicPartModel {
-  int32 moduleId = 1;
-  bool isGateEnable = 2;
-  float gateThresholdValue = 3;
-  float gateAttackValue = 4;
-  float gateReleaseValue = 5;
-  float gateHoldValue = 6;
-  float gateDepthValue = 7;
-  bool isCompressorEnable = 8;
-  float compressorTresholdValue = 9;
-  float compressorAttackValue = 10;
-  float compressorReleaseValue = 11;
-  float compressorGainValue = 12;
-  float compressorRatioValue = 13;
-  bool dynamicByPass = 14;
-  int32 chainModuleId = 15;
-  int32 selectedLibIndex = 16;
+  optional int32 moduleId = 1;
+  optional bool isGateEnable = 2;
+  optional float gateThresholdValue = 3;
+  optional float gateAttackValue = 4;
+  optional float gateReleaseValue = 5;
+  optional float gateHoldValue = 6;
+  optional float gateDepthValue = 7;
+  optional bool isCompressorEnable = 8;
+  optional float compressorTresholdValue = 9;
+  optional float compressorAttackValue = 10;
+  optional float compressorReleaseValue = 11;
+  optional float compressorGainValue = 12;
+  optional float compressorRatioValue = 13;
+  optional bool dynamicByPass = 14;
+  optional int32 chainModuleId = 15;
+  optional int32 selectedLibIndex = 16;
 }
 
 
 message EqPartModel {
-  int32 moduleId = 1;
-  bool isByPass = 2;
-  float highFreqValue = 3;
-  float highGainValue = 4;
-  float highQValue = 5;
-  float highMidFreqValue = 6;
-  float highMidGainValue = 7;
-  float highMidQValue = 8;
-  float lowMidFreqValue = 9;
-  float lowMidGainValue = 10;
-  float lowMidQValue = 11;
-  float lowFreqValue = 12;
-  float lowGainValue = 13;
-  float lowQValue = 14;
-  .com.dm20remote.proto.EqFragment selectedEq = 15;
-  int32 selectedLibIndex = 16;
-  int32 highType = 17;
-  int32 lowType = 18;
+  optional int32 moduleId = 1;
+  optional bool isByPass = 2;
+  optional float highFreqValue = 3;
+  optional float highGainValue = 4;
+  optional float highQValue = 5;
+  optional float highMidFreqValue = 6;
+  optional float highMidGainValue = 7;
+  optional float highMidQValue = 8;
+  optional float lowMidFreqValue = 9;
+  optional float lowMidGainValue = 10;
+  optional float lowMidQValue = 11;
+  optional float lowFreqValue = 12;
+  optional float lowGainValue = 13;
+  optional float lowQValue = 14;
+  optional .com.dm20remote.proto.EqFragment selectedEq = 15;
+  optional int32 selectedLibIndex = 16;
+  optional int32 highType = 17;
+  optional int32 lowType = 18;
 }
 enum EqFragment {
   High = 0;
@@ -499,36 +500,39 @@ message EfxModuleModel {
   string name = 3;
 }
 message MicInInputPartModel {
-  int32 moduleId = 1;
-  bool is48vEnable = 2;
-  bool isSumEnable = 3;
-  bool isRevEnable = 4;
-  bool isDelayEnable = 5;
-  float delayValue = 6;
-  bool isHPFEnable = 7;
-  float hpfValue = 8;
-  float trimValue = 9;
+  optional int32 moduleId = 1;
+  optional bool is48vEnable = 2;
+  optional bool isSumEnable = 3;
+  optional bool isRevEnable = 4;
+  optional bool isDelayEnable = 5;
+  optional float delayValue = 6;
+  optional bool isHPFEnable = 7;
+  optional float hpfValue = 8;
+  optional float trimValue = 9;
   repeated .com.dm20remote.proto.EfxModuleModel moduleModel = 10;
-  int32 modul1Value = 11;
-  int32 modul2Value = 12;
-  int32 delay1Value = 13;
-  int32 delay2Value = 14;
-  int32 reverb1Value = 15;
-  int32 reverb2Value = 16;
-  int32 geq1Value = 17;
-  int32 geq2Value = 18;
-  bool isTrimEnable = 19;
-  float gainValue = 20;
+  optional int32 modul1Value = 11;
+  optional int32 modul2Value = 12;
+  optional int32 delay1Value = 13;
+  optional int32 delay2Value = 14;
+  optional int32 reverb1Value = 15;
+  optional int32 reverb2Value = 16;
+  optional int32 geq1Value = 17;
+  optional int32 geq2Value = 18;
+  optional bool isTrimEnable = 19;
+  optional float gainValue = 20;
 }
 
 
 message MicInOutputPartModel {
-  int32 moduleId = 1;
-  float panValue = 2;
-  bool isSoloEnable = 3;
-  bool isMuteEnable = 4;
-  float outFaderValue = 5;
-  bool isLREnable = 6;
+  // Change events (protoId 109) are sparse - only changed fields are on the wire.
+  // proto3 scalars have no presence bit, so every field is `optional` to tell
+  // "unchanged" from "set to the default value" (see docs/protocol-spec.md 4.1).
+  optional int32 moduleId = 1;
+  optional float panValue = 2;
+  optional bool isSoloEnable = 3;
+  optional bool isMuteEnable = 4;
+  optional float outFaderValue = 5;
+  optional bool isLREnable = 6;
 }
 
 
@@ -638,45 +642,45 @@ message SetupFxReverbModel {
 
 
 message SetupInfoModel {
-  int32 moduleId = 1;
-  int32 brightnessIndex = 2;
-  bool msUnit = 3;
-  bool ftUnit = 4;
-  bool mUnit = 5;
-  bool isRate48KHz = 6;
-  bool isRate44KHz = 7;
-  bool isFactReset = 8;
-  bool isNetUpdate = 9;
-  bool isFullRestore = 10;
-  bool isWifiEnable = 11;
-  bool isWifiHost = 12;
-  bool isWifiClient = 13;
-  bool isRemoteEnable = 14;
-  string apkVersion = 15;
-  string dspVersion = 16;
-  string serialID = 17;
-  bool isBus8LpfEnable = 18;
-  float bus8LpfValue = 19;
-  bool isMasterLrHPFEnable = 20;
-  float masterLrHpfValue = 21;
+  optional int32 moduleId = 1;
+  optional int32 brightnessIndex = 2;
+  optional bool msUnit = 3;
+  optional bool ftUnit = 4;
+  optional bool mUnit = 5;
+  optional bool isRate48KHz = 6;
+  optional bool isRate44KHz = 7;
+  optional bool isFactReset = 8;
+  optional bool isNetUpdate = 9;
+  optional bool isFullRestore = 10;
+  optional bool isWifiEnable = 11;
+  optional bool isWifiHost = 12;
+  optional bool isWifiClient = 13;
+  optional bool isRemoteEnable = 14;
+  optional string apkVersion = 15;
+  optional string dspVersion = 16;
+  optional string serialID = 17;
+  optional bool isBus8LpfEnable = 18;
+  optional float bus8LpfValue = 19;
+  optional bool isMasterLrHPFEnable = 20;
+  optional float masterLrHpfValue = 21;
 }
 
 
 message SetupMeterModel {
-  .com.dm20remote.proto.EnmChannelMeterStatue channelMeterStatue = 1;
-  .com.dm20remote.proto.EnmBusMeterStatue busMeterStatue = 2;
-  int32 out1 = 3;
-  int32 out2 = 4;
-  int32 out3 = 5;
-  int32 out4 = 6;
-  int32 out5 = 7;
-  int32 out6 = 8;
-  int32 out7 = 9;
-  int32 out8 = 14;
-  int32 spdif_u = 15;
-  int32 spdif_d = 16;
-  int32 usb_u = 17;
-  int32 usb_d = 18;
+  optional .com.dm20remote.proto.EnmChannelMeterStatue channelMeterStatue = 1;
+  optional .com.dm20remote.proto.EnmBusMeterStatue busMeterStatue = 2;
+  optional int32 out1 = 3;
+  optional int32 out2 = 4;
+  optional int32 out3 = 5;
+  optional int32 out4 = 6;
+  optional int32 out5 = 7;
+  optional int32 out6 = 8;
+  optional int32 out7 = 9;
+  optional int32 out8 = 14;
+  optional int32 spdif_u = 15;
+  optional int32 spdif_d = 16;
+  optional int32 usb_u = 17;
+  optional int32 usb_d = 18;
 }
 enum EnmChannelMeterStatue {
   Channel_In = 0;
@@ -690,23 +694,23 @@ enum EnmBusMeterStatue {
 
 
 message SetupMonitorModel {
-  bool isAflEnable = 1;
-  bool isMuteEnable = 2;
-  bool isOsciEnable = 3;
-  float mpLevelValue = 4;
-  float osciLevelValue = 5;
-  float osciFreqValue = 6;
-  float soloAflValue = 7;
-  int32 typeValue = 8;
-  bool isBus1 = 9;
-  bool isBus2 = 10;
-  bool isBus3 = 11;
-  bool isBus4 = 12;
-  bool isBus5 = 13;
-  bool isBus6 = 14;
-  bool isBus7 = 15;
-  bool isBus8 = 16;
-  bool isMasterLR = 17;
+  optional bool isAflEnable = 1;
+  optional bool isMuteEnable = 2;
+  optional bool isOsciEnable = 3;
+  optional float mpLevelValue = 4;
+  optional float osciLevelValue = 5;
+  optional float osciFreqValue = 6;
+  optional float soloAflValue = 7;
+  optional int32 typeValue = 8;
+  optional bool isBus1 = 9;
+  optional bool isBus2 = 10;
+  optional bool isBus3 = 11;
+  optional bool isBus4 = 12;
+  optional bool isBus5 = 13;
+  optional bool isBus6 = 14;
+  optional bool isBus7 = 15;
+  optional bool isBus8 = 16;
+  optional bool isMasterLR = 17;
 }
 
 

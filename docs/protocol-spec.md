@@ -15,12 +15,17 @@
 
 ```
 UDP  ->  255.255.255.255:6399   payload: 5A 5A 5A 5A
-UDP  <-  console (source IP)    payload: "OK" ...
+UDP  <-  console (source IP)    payload: "OK"
 ```
 
 - Sent by `ConnectActivity` on "Search" (`DatagramSocket`, broadcast, `soTimeout = 5000 ms`).
 - Any reply whose first two bytes are `"OK"` (`0x4F 0x4B`) marks the sender as a console.
 - Default static address `192.168.43.1` (the console's own Wi-Fi AP), control port `6400`.
+- **Confirmed from hardware.** The replacement app probes the global broadcast *and* every interface's
+  subnet broadcast (`Discovery.broadcastAddresses()`); the capture's log shows both going out
+  (`255.255.255.255:6399` and `192.168.1.255:6399`) and the console answering both. The reply is
+  **exactly the two bytes `OK`** — no hostname, model or serial — so a discovered console can only ever
+  be presented by address.
 
 ## 2. Connections
 
@@ -111,8 +116,29 @@ signed-dB interpretation is self-consistent: `0x80` (−128) is the silent/floor
 | 77–78 | bus **134** (Bus7) `L_OUT`/`R_OUT` |
 | 79–80 | bus **135** (Bus8) `L_OUT`/`R_OUT` |
 
-The table is the static `MeterListener.channelMeterMapper` (`Map<ChannelMeterItem,Integer>`) — so the frame
-is always **80 bytes** even when fewer meters are displayed.
+The table is the static `MeterListener.channelMeterMapper` (`Map<ChannelMeterItem,Integer>`) — it covers
+**80 slots**, which is what the original app ever addressed.
+
+**Payload length — corrected from hardware.** A capture from a real DM20 (`wire-20261018-102004.log`,
+19 321 frames, every one exactly 102 B) shows the frame carries **100** values, not 80:
+
+```
+0a 64 b2 00 a6 00 00 a6 b2 00 a6 b2 00 a6 00 00  |.d..............|
+```
+
+`0a 64` is the protobuf tag (`field 1, wire type 2`) and length (`0x64` = 100) for `gainValue`; the
+following 100 bytes are the meter values. So the message is **102 B** on the wire, and the last **20**
+bytes are not covered by the slot table above — their assignment is unknown (they are never read by
+`MeterListener`, which indexes `bMeter[id-1]` for ids ≤ 80).
+
+An implementation that treats the frame *payload* as the array rather than parsing `MeterLevelData`
+reads `0a` and `64` as meters 1 and 2 — 10 dB and an impossible 100 dB — and shifts every real slot two
+places right. That is exactly what the replacement app did until this capture; the mock console shipped
+with it sent a bare 80-byte array with no envelope, which is why the emulator never exposed it.
+
+**Meter rate — corrected from hardware.** 19 321 frames over 3 274 s, median inter-frame gap **194 ms**:
+the console streams at roughly **6 Hz**, not the ~10 Hz previously assumed. The reference mock streams at
+the same rate.
 
 ### 3.4 Music channel (`6402`) — console → client
 
@@ -144,7 +170,16 @@ protoId) would desynchronise it. The bare delimited layout above is the only sha
 
 **Caveat.** `proccessMediaMusicTimeEvent` throws the parsed value away and swallows parse errors, so
 static analysis fixes the *shape* (`delimited`, no header) while the message *type* is inferred from the
-parse call. Confirming what a real DM20 actually sends is tracked by issue #5 (hardware needed).
+parse call.
+
+**Confirmed from hardware — partially.** The first capture from a real DM20 (`wire-20261018-102004.log`,
+54 min) shows `6402` carry **nothing at all** while no media is loaded: the client connects the channel
+and receives zero frames for the whole session, so the shape above is still unexercised and issue #5
+remains open for this channel. What the capture *does* show is how the console reports an idle transport:
+a single `IN_MUSIC_STATE (195)` on the **control** channel, immediately after the snapshot, with an
+**empty payload** — i.e. a zero-length `PlayCommand` (`record_time_ms: 0`), which decodes to the default
+instance and therefore means "no media". A client that treats a 195 with an empty body as a reset to
+idle is consistent with both this and the static reading.
 
 `PlayCommand` carries `playMode`, `songPath`, `songDuration`, `currentPosition`, `instruction`,
 `isRecord`, `isPlay`, `recordTimeMs` (§6). The same message is used for the control-channel media events
@@ -165,7 +200,50 @@ control channel reported.
 - **Change events mirror commands.** An accepted client command is confirmed by the console re-sending the
   resulting model under the *preceding odd* id — e.g. `110` (`MicInOutputPartModel`) is acknowledged with
   `109`, and `114` (`BusOutputModel`) with `113`. The client does not get a distinct success/failure code, so
-  UI state should be treated as confirmed only once the change event comes back.
+  UI state should be treated as confirmed only once the change event comes back. The console also pushes
+  these unsolicited whenever the physical surface moves: the capture logged 30 `109` messages against 9
+  client `110` commands, so the extra 21 were the desk itself.
+
+### 4.1 Change events are **sparse** — confirmed from hardware
+
+**This is the single most important correction in this document.** The change events (odd protoIds) are
+not complete models: the console sends **only the fields that changed**. Protobuf encodes absent scalar
+fields as absent, and the Java runtime reports them as their default, so a client that replaces its stored
+model with the parsed event *silently resets every field that was not in the message*.
+
+Observed in `wire-20261018-102004.log`:
+
+```
+08 01                                 IN_MIC_OUTPUT_PART(109)  2 B
+  MicInOutputPartModel { module_id: 1 }                      <- nothing else
+
+08 06 2d 00 c0 30 44                  IN_MIC_OUTPUT_PART(109)  7 B
+  MicInOutputPartModel { module_id: 6, out_fader_value: 707.0 }
+
+                                      IN_MIC_OUTPUT_PART(109)  7 B
+  MicInOutputPartModel { out_fader_value: 103.0 }            <- module_id omitted too
+
+08 04 10 a8 05 18 01 2d 00 80 40 44   IN_MIC_BUS_PART(107)     12 B
+  MicInBusModel { bus_param_id: 680, gain_value: 770.0,
+                  is_bus_enable: true, module_id: 4 }
+
+08 04 10 a8 05 18 01                  IN_MIC_BUS_PART(107)     7 B
+  MicInBusModel { bus_param_id: 680, is_bus_enable: true,
+                  module_id: 4 }                            <- gain_value omitted
+```
+
+So a client must **merge**, not replace:
+
+1. Track field presence explicitly. Plain `proto3` scalars have no presence bit, so the schema must mark
+   the scalar fields `optional` (proto3 explicit presence) to be able to tell "unchanged" from "set to the
+   default value". `is_mute_enable: false` and "mute not mentioned" are indistinguishable otherwise, and
+   the distinction is exactly what mute/solo handling needs.
+2. Merge present fields into the stored model for the addressed module.
+3. Treat `module_id` as required in practice — every observed `109`/`107` carried it — but a message that
+   omits it decodes as `module_id: 0`, so a client must not blindly apply such an event to module 0.
+
+The wire format is unaffected by marking fields `optional`: it only changes presence tracking, so the
+schema stays byte-compatible with the console.
 
 ## 5. protoId map
 
@@ -425,7 +503,7 @@ channel on `6400`, the meter channel on `6401`, and the music channel on `6402`.
 | Init request | Received as exactly `[5A x6][int32 1][int32 0]`, 14 bytes, no varint — matching §3.1 |
 | Snapshot | `SKDMCData` serialised by the mock was decoded by the app; channel names and bus names rendered |
 | Fader conversion | Mock positions 760/745/700/690/720/680/780/765/640 produced `+0.2 / -0.3 / -1.9 / -2.3 / -1.2 / -2.6 / +0.9 / +0.4 / -4.2 dB`, matching `HardwareUtil.ConvertFaderValue` |
-| Meter channel | `[5A 5A][int32 0][int32 len][varint][80 bytes]` decoded continuously (thousands of frames) |
+| Meter channel | `[5A 5A][int32 0][int32 len][varint][80 bytes]` decoded continuously — **but the mock sent a bare array with no `MeterLevelData` envelope, so this row proved less than it claimed** (see §3.3 and the hardware section below) |
 | Input fader | Drag produced `protoId 110` with `moduleId`, `panValue`, `isSoloEnable`, `isMuteEnable`, `outFaderValue`; values clamp to `0…1000` |
 | Input mute / solo | Each tap produced a correct `protoId 110` with only the changed flag differing |
 | Bus fader | Produced `protoId 114` with `moduleId 128` (BUS 1) and the expected `gainValue` |
@@ -462,4 +540,36 @@ that only exist on modern Android were checked as well:
 reported for that channel, not just the fader. A command that omitted the untouched fields would reset
 them on the hardware, so each outbound payload is built from the channel's current model with only the
 touched field changed.
+
+**Note the asymmetry with §4.1.** Outbound commands are whole-model; inbound change events are *sparse*.
+The mock console mirrored full models both ways, which is why the emulator exercised the mirroring but
+could never expose the sparse-event defect below.
+
+### 10.1 Verification against real hardware
+
+The first capture from a physical DM20 — `wire-20261018-102004.log`, 54 min, 19 321 meter frames,
+console at `192.168.1.81` — validates most of this document and corrects four claims.
+
+| Check | Result |
+|---|---|
+| Discovery | Probes on `6399` answered; reply is exactly `OK` (2 B), no identifying payload (§1) |
+| Three channels | 6400/6401/6402 all connected |
+| Handshake | `IN_ALL_DATA (1)` `0 B` request → `10940 B` `SKDMCData` snapshot (§4) |
+| Control & meter framing | Both exactly as specified (§3.1, §3.3) |
+| Command mirroring | 9 client `110` → 30 console `109`; the extra 21 were the desk's own moves |
+| Meter payload length | **100 values, not 80** (§3.3) |
+| Meter rate | **~6 Hz, not ~10 Hz** (§3.3) |
+| Change events | **Sparse — only changed fields** (§4.1); this defect was not previously known |
+| Music channel | Carried **zero frames** for the whole session; idle state reported as an empty `195` on the control channel (§3.4) |
+
+**Two defects in the replacement app this capture found**, both invisible to the mock:
+
+1. The meter decoder read the frame payload as the array, so the `0a 64` envelope was consumed as two
+   meter values and every slot was shifted two places right. Fixed by parsing `MeterLevelData`.
+2. Change events replaced the stored model wholesale, so every sparse echo reset the fields it omitted —
+   mute, solo and pan returning to their defaults on any unrelated change. Fixed by marking the scalar
+   fields `optional` and merging present fields only.
+
+The mock console was corrected to send the real `MeterLevelData` envelope (100 bytes, `0a 64 …`) at the
+real ~6 Hz, so the meter path is now exercised against the shape the hardware actually sends.
 
