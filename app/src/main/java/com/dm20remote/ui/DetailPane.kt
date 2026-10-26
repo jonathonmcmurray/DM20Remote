@@ -3,6 +3,7 @@ package com.dm20remote.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,8 +19,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -29,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dm20remote.R
@@ -36,24 +41,29 @@ import com.dm20remote.model.BusChannel
 import com.dm20remote.model.ConsoleSession
 import com.dm20remote.model.ConsoleState
 import com.dm20remote.model.InputChannel
+import com.dm20remote.net.BusSends
 import com.dm20remote.net.EqBands
 import com.dm20remote.net.Units
 import com.dm20remote.net.bandFrequency
 import com.dm20remote.net.bandGain
 import com.dm20remote.net.bandQ
 import com.dm20remote.net.isBandShelf
+import com.dm20remote.net.slotAt
+import com.dm20remote.proto.MicInBusModel
 import com.dm20remote.ui.components.ColumnRule
 import com.dm20remote.ui.components.Dm20Chip
+import com.dm20remote.ui.components.Dm20Slider
 import com.dm20remote.ui.components.Dm20Switch
 import com.dm20remote.ui.components.DmText
 import com.dm20remote.ui.components.ParamRow
 import com.dm20remote.ui.components.ReadoutRow
+import com.dm20remote.ui.components.RowRule
 import com.dm20remote.ui.components.SectionTitle
 
 /**
  * The full-width detail pages that replaced the old modal dialogs.
  *
- * All three input pages share the same frame — header, title row, content, the
+ * All four input pages share the same frame — header, title row, content, the
  * scroll row and the channel dock — so only the content area differs. The bus page
  * has no design of its own (the mockups only covered the input pages); it reuses
  * the same frame and lays the few bus parameters out in the two-column form.
@@ -86,6 +96,7 @@ internal fun InputDetailScreen(
             when (detailTab) {
                 DETAIL_PEQ -> PeqPage(channel)
                 DETAIL_DYNAMICS -> DynamicsPage(channel)
+                DETAIL_SENDS -> SendsPage(channel, state.buses)
                 else -> ChannelPage(channel)
             }
         }
@@ -502,6 +513,174 @@ private fun DynamicsPage(channel: InputChannel) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Sends page: the nine bus sends of one input channel
+// ---------------------------------------------------------------------------
+
+/**
+ * One scrollable table with a row per bus send: the desk has eight buses plus the
+ * stereo L/R master, and every row carries the same four values.
+ *
+ * The rows are 40 dp each, so the table is taller than the content area on a
+ * phone-sized landscape screen and scrolls. It is deliberately a single table
+ * rather than two columns: send level and send pan belong to the same bus, and
+ * splitting them would make it easy to move the wrong bus's pan.
+ */
+@Composable
+private fun SendsPage(channel: InputChannel, buses: List<BusChannel>) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+    ) {
+        SectionTitle(stringResource(R.string.section_sends))
+        Spacer(Modifier.height(4.dp))
+        for (slot in 0 until BusSends.SLOT_COUNT) {
+            if (slot > 0) RowRule()
+            SendRow(
+                name = sendBusName(slot, buses),
+                send = channel.busSend.slotAt(slot),
+                onEnabled = { ConsoleSession.setBusSendEnabled(channel, slot, it) },
+                onPrefader = { ConsoleSession.setBusSendPrefader(channel, slot, it) },
+                onGain = { ConsoleSession.setBusSendGain(channel, slot, it) },
+                onPan = { ConsoleSession.setBusSendPan(channel, slot, it) },
+            )
+        }
+    }
+}
+
+/** `BUS 1`..`BUS 8` from the live snapshot, then the unnamed L/R master. */
+@Composable
+private fun sendBusName(slot: Int, buses: List<BusChannel>): String =
+    if (BusSends.isLr(slot)) {
+        stringResource(R.string.send_master)
+    } else {
+        buses.getOrNull(slot)?.name ?: stringResource(R.string.send_bus, slot + 1)
+    }
+
+@Composable
+private fun SendRow(
+    name: String,
+    send: MicInBusModel,
+    onEnabled: (Boolean) -> Unit,
+    onPrefader: (Boolean) -> Unit,
+    onGain: (Float) -> Unit,
+    onPan: (Float) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(40.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DmText(
+            text = name,
+            style = Dm20Type.row,
+            color = Dm20Colors.onSurface,
+            modifier = Modifier.width(SendNameWidth),
+        )
+        Dm20Chip(
+            label = stringResource(R.string.send_on),
+            active = send.isBusEnable,
+            onClick = { onEnabled(!send.isBusEnable) },
+            width = SendOnWidth,
+            height = 22.dp,
+            radius = 5.dp,
+            style = Dm20Type.label,
+        )
+        Dm20Chip(
+            label = stringResource(R.string.send_pre),
+            active = send.isPrefader,
+            onClick = { onPrefader(!send.isPrefader) },
+            width = SendPreWidth,
+            height = 22.dp,
+            radius = 5.dp,
+            style = Dm20Type.label,
+        )
+        DmText(
+            text = stringResource(R.string.send_level),
+            style = Dm20Type.caption,
+            color = Dm20Colors.dim,
+            modifier = Modifier.width(SendCaptionWidth),
+        )
+        SendSlider(
+            travel = send.gainValue,
+            onValue = onGain,
+            format = { formatDbUnit(Units.faderPositionToDb(it)) },
+            readoutWidth = SendLevelReadoutWidth,
+            weight = 1.2f,
+        )
+        DmText(
+            text = stringResource(R.string.send_pan),
+            style = Dm20Type.caption,
+            color = Dm20Colors.dim,
+            modifier = Modifier.width(SendCaptionWidth),
+        )
+        SendSlider(
+            travel = panToTravel(send.panValue),
+            onValue = { onPan(travelToPan(it)) },
+            format = { formatPan(travelToPan(it)) },
+            readoutWidth = SendPanReadoutWidth,
+            weight = 1f,
+            detent = true,
+        )
+    }
+}
+
+/**
+ * A slider plus its read-out inside a [SendRow].
+ *
+ * The two live in one helper because the read-out has to track the finger, not the
+ * echoed model: between the drag and the console's `107` the stored value is still
+ * the old one. This is the same local-value pattern [ParamRow] uses.
+ */
+@Composable
+private fun RowScope.SendSlider(
+    travel: Float,
+    onValue: (Float) -> Unit,
+    format: (Float) -> String,
+    readoutWidth: Dp,
+    weight: Float,
+    detent: Boolean = false,
+) {
+    var dragging by remember { mutableStateOf(false) }
+    var local by remember { mutableFloatStateOf(travel) }
+    LaunchedEffect(travel) {
+        if (!dragging) local = travel
+    }
+
+    Dm20Slider(
+        travel = local.coerceIn(0f, 1000f),
+        onTravelChange = {
+            dragging = true
+            local = it
+        },
+        onCommit = {
+            dragging = false
+            onValue(local)
+        },
+        onDrag = { onValue(it) },
+        detent = detent,
+        height = Dm20Metrics.sliderHeight,
+        modifier = Modifier.weight(weight),
+    )
+    DmText(
+        text = format(local),
+        style = Dm20Type.body,
+        color = Dm20Colors.onSurfaceVariant,
+        align = TextAlign.End,
+        modifier = Modifier.width(readoutWidth),
+    )
+}
+
+// Fixed columns of the sends table, shared by every row so the sliders line up.
+private val SendNameWidth = 92.dp
+private val SendOnWidth = 38.dp
+private val SendPreWidth = 42.dp
+private val SendCaptionWidth = 26.dp
+private val SendLevelReadoutWidth = 66.dp
+private val SendPanReadoutWidth = 40.dp
 
 // ---------------------------------------------------------------------------
 // Bus page: the bus model is much smaller than an input, so this is short

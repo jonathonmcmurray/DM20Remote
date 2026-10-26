@@ -2,6 +2,7 @@ package com.dm20remote.net
 
 import com.dm20remote.proto.BusOutputModel
 import com.dm20remote.proto.EqPartModel
+import com.dm20remote.proto.MicInBusModel
 import com.dm20remote.proto.MicInDynamicPartModel
 import com.dm20remote.proto.MicInOutputPartModel
 import com.dm20remote.proto.PlayCommand
@@ -47,6 +48,39 @@ object ConsoleCommands {
 
     fun busDelayEnable(base: BusOutputModel, moduleId: Int, enabled: Boolean) =
         base.toBuilder().setModuleId(moduleId).setIsDelayEnable(enabled).build()
+
+    // ---- per-channel bus sends (MicInBusModel, OUT_MIC_BUS_PART) -----------
+    //
+    // A send is addressed by (moduleId, busParamId) and carries all four values,
+    // so each edit starts from the send the console last reported. The identity
+    // fields are set explicitly: a base that was never seen in a snapshot has
+    // neither, and a command without them cannot say which send it means.
+    // See docs/protocol-spec.md §5.1.1 for the busParamId table.
+
+    private fun busSend(
+        base: MicInBusModel,
+        moduleId: Int,
+        slot: Int,
+        change: (MicInBusModel.Builder) -> Unit,
+    ): MicInBusModel {
+        val builder = base.toBuilder()
+            .setModuleId(moduleId)
+            .setBusParamId(BusSends.paramIdOf(slot))
+        change(builder)
+        return builder.build()
+    }
+
+    fun busSendEnable(base: MicInBusModel, moduleId: Int, slot: Int, enabled: Boolean) =
+        busSend(base, moduleId, slot) { it.setIsBusEnable(enabled) }
+
+    fun busSendPrefader(base: MicInBusModel, moduleId: Int, slot: Int, prefader: Boolean) =
+        busSend(base, moduleId, slot) { it.setIsPrefader(prefader) }
+
+    fun busSendGain(base: MicInBusModel, moduleId: Int, slot: Int, position: Float) =
+        busSend(base, moduleId, slot) { it.setGainValue(position) }
+
+    fun busSendPan(base: MicInBusModel, moduleId: Int, slot: Int, pan: Float) =
+        busSend(base, moduleId, slot) { it.setPanValue(pan) }
 
     // ---- PEQ (EqPartModel, OUT_MIC_EQ_PART) --------------------------------
     //

@@ -3,6 +3,7 @@ package com.dm20remote.model
 import com.dm20remote.net.ConsoleEvent
 import com.dm20remote.net.Inbound
 import com.dm20remote.proto.EqPartModel
+import com.dm20remote.proto.MicInBusModel
 import com.dm20remote.proto.MicInDynamicPartModel
 import com.dm20remote.proto.MicInOutputPartModel
 import com.dm20remote.proto.MusicItem
@@ -208,6 +209,120 @@ class ConsoleStoreTest {
         )
 
         assertEquals(before, store.state.value.inputs.map { it.output })
+    }
+
+    // ---------------------------------------------------------------- bus sends
+    // A `107` event names one channel *and* one bus. The exact frames below were
+    // captured from hardware at 10:27:16 (wire-20261018-102004.log): a gain move
+    // on bus 696 of channel 8, for which the desk sent only the three fields that
+    // described the change.
+
+    @Test
+    fun `the captured bus send frame parses as module 8 on bus 696`() {
+        val frame = "080810b8052d00c03c44".hex()
+        val model = MicInBusModel.parseFrom(frame)
+
+        assertEquals(8, model.moduleId)
+        assertEquals(696, model.busParamId)
+        assertEquals(755f, model.gainValue, 0f)
+        assertFalse(model.hasIsBusEnable())
+        assertFalse(model.hasIsPrefader())
+        assertFalse(model.hasPanValue())
+        assertArrayEquals(frame, model.toByteArray())
+    }
+
+    @Test
+    fun `a bus send gain echo folds into one slot of one channel`() {
+        store.onEvent(
+            ConsoleEvent.Message(
+                Inbound.MicBusPart(
+                    MicInBusModel.newBuilder()
+                        .setModuleId(8)
+                        .setBusParamId(696)
+                        .setIsBusEnable(true)
+                        .setIsPrefader(true)
+                        .setGainValue(500f)
+                        .setPanValue(-25f)
+                        .build(),
+                ),
+            ),
+        )
+
+        // Gain only: enable, pre-fader and pan are absent from the event.
+        val sparse = MicInBusModel.parseFrom("080810b8052d00c03c44".hex())
+        store.onEvent(ConsoleEvent.Message(Inbound.MicBusPart(sparse)))
+
+        val busSend = store.state.value.inputs[8].busSend
+        assertEquals(755f, busSend.bus7.gainValue, 0f)
+        assertTrue(busSend.bus7.isBusEnable)
+        assertTrue(busSend.bus7.isPrefader)
+        assertEquals(-25f, busSend.bus7.panValue, 0f)
+        // Nothing else on the channel moved.
+        assertEquals(0f, busSend.bus6.gainValue, 0f)
+        assertEquals(0f, busSend.bus8.gainValue, 0f)
+        assertEquals(0f, busSend.busLnR.gainValue, 0f)
+    }
+
+    @Test
+    fun `a bus send echo leaves other channels untouched`() {
+        store.onEvent(
+            ConsoleEvent.Message(
+                Inbound.MicBusPart(
+                    MicInBusModel.newBuilder().setModuleId(8).setBusParamId(696).setGainValue(755f).build(),
+                ),
+            ),
+        )
+
+        assertEquals(755f, store.state.value.inputs[8].busSend.bus7.gainValue, 0f)
+        assertEquals(0f, store.state.value.inputs[7].busSend.bus7.gainValue, 0f)
+        assertEquals(0f, store.state.value.inputs[9].busSend.bus7.gainValue, 0f)
+    }
+
+    @Test
+    fun `a bus send event without a bus parameter is dropped`() {
+        val before = store.state.value.inputs.map { it.busSend }
+
+        store.onEvent(
+            ConsoleEvent.Message(
+                Inbound.MicBusPart(MicInBusModel.newBuilder().setModuleId(4).setGainValue(999f).build()),
+            ),
+        )
+
+        assertEquals(before, store.state.value.inputs.map { it.busSend })
+    }
+
+    @Test
+    fun `a bus send event with an unknown bus parameter is dropped`() {
+        val before = store.state.value.inputs.map { it.busSend }
+
+        store.onEvent(
+            ConsoleEvent.Message(
+                Inbound.MicBusPart(
+                    MicInBusModel.newBuilder()
+                        .setModuleId(4)
+                        .setBusParamId(200)
+                        .setGainValue(999f)
+                        .build(),
+                ),
+            ),
+        )
+
+        assertEquals(before, store.state.value.inputs.map { it.busSend })
+    }
+
+    @Test
+    fun `a bus send event without a module id is dropped`() {
+        val before = store.state.value.inputs.map { it.busSend }
+
+        store.onEvent(
+            ConsoleEvent.Message(
+                Inbound.MicBusPart(
+                    MicInBusModel.newBuilder().setBusParamId(696).setGainValue(999f).build(),
+                ),
+            ),
+        )
+
+        assertEquals(before, store.state.value.inputs.map { it.busSend })
     }
 }
 

@@ -37,10 +37,11 @@ internal const val TAB_BUSES = 1
 internal const val TAB_CONSOLE = 2
 internal const val TAB_MUSIC = 3
 
-/** The three sub-tabs of an input channel. */
+/** The four sub-tabs of an input channel. */
 internal const val DETAIL_CHANNEL = 0
 internal const val DETAIL_PEQ = 1
 internal const val DETAIL_DYNAMICS = 2
+internal const val DETAIL_SENDS = 3
 
 /**
  * The console itself, once a console is connected.
@@ -233,10 +234,11 @@ internal fun DetailHeader(
                         stringResource(R.string.detail_channel),
                         stringResource(R.string.detail_peq),
                         stringResource(R.string.detail_dynamics),
+                        stringResource(R.string.detail_sends),
                     ),
                     selectedIndex = detailTab,
                     onSelect = onDetailTab,
-                    itemWidth = 84.dp,
+                    itemWidth = 72.dp,
                     modifier = Modifier.align(Alignment.Center),
                 )
             }

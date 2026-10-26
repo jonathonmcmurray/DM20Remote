@@ -71,6 +71,14 @@
     <string name="detail_channel">Channel</string>
     <string name="detail_peq">PEQ</string>
     <string name="detail_dynamics">Dynamics</string>
+    <string name="detail_sends">Sends</string>
+    <string name="section_sends">Bus sends</string>
+    <string name="send_on">ON</string>
+    <string name="send_pre">PRE</string>
+    <string name="send_master">Master L/R</string>
+    <string name="send_bus">BUS %1$d</string>
+    <string name="send_level">LVL</string>
+    <string name="send_pan">PAN</string>
     <string name="section_gain">Gain</string>
     <string name="section_pan_input">Pan &amp; input</string>
     <string name="param_fader">Fader</string>

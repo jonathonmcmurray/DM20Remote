@@ -5,6 +5,7 @@ import com.dm20remote.net.ConsoleCommands
 import com.dm20remote.net.DiscoveredConsole
 import com.dm20remote.net.Discovery
 import com.dm20remote.net.ProtoIds
+import com.dm20remote.net.slotAt
 import com.dm20remote.net.TransportInstruction
 import com.dm20remote.proto.MicInInputPartModel
 import com.dm20remote.proto.PlayCommand
@@ -195,6 +196,32 @@ object ConsoleSession {
     fun setBusDelayEnable(bus: BusChannel, enabled: Boolean) = send(
         ProtoIds.OUT_BUS_OUTPUT_PART,
         ConsoleCommands.busDelayEnable(bus.output, bus.moduleId, enabled),
+    )
+
+    // ---- bus send commands -------------------------------------------------
+    //
+    // A send is one slot of the channel's MicInBusSendModel, so every command is
+    // built from the slot the console last reported and the UI only moves when the
+    // resulting `107` comes back (see docs/protocol-spec.md §5.1.1).
+
+    fun setBusSendEnabled(channel: InputChannel, slot: Int, enabled: Boolean) = send(
+        ProtoIds.OUT_MIC_BUS_PART,
+        ConsoleCommands.busSendEnable(channel.busSend.slotAt(slot), channel.moduleId, slot, enabled),
+    )
+
+    fun setBusSendPrefader(channel: InputChannel, slot: Int, prefader: Boolean) = send(
+        ProtoIds.OUT_MIC_BUS_PART,
+        ConsoleCommands.busSendPrefader(channel.busSend.slotAt(slot), channel.moduleId, slot, prefader),
+    )
+
+    fun setBusSendGain(channel: InputChannel, slot: Int, position: Float) = send(
+        ProtoIds.OUT_MIC_BUS_PART,
+        ConsoleCommands.busSendGain(channel.busSend.slotAt(slot), channel.moduleId, slot, position),
+    )
+
+    fun setBusSendPan(channel: InputChannel, slot: Int, pan: Float) = send(
+        ProtoIds.OUT_MIC_BUS_PART,
+        ConsoleCommands.busSendPan(channel.busSend.slotAt(slot), channel.moduleId, slot, pan),
     )
 
     // ---- transport / recorder commands ------------------------------------

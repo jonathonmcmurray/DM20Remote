@@ -16,8 +16,9 @@
 //   * applies play/pause/stop/select/record/play-mode commands (protoId 192) to
 //     that player and reports the resulting state on 195
 //   * mirrors accepted control changes back on the matching "change event" id
-//     (PEQ 104 -> 103, dynamics 106 -> 105, input 110 -> 109, bus 114 -> 113),
-//     carrying **only the fields that changed** — see `sparseEcho` below
+//     (PEQ 104 -> 103, dynamics 106 -> 105, bus send 108 -> 107,
+//     input 110 -> 109, bus 114 -> 113), carrying **only the fields that
+//     changed** — see `sparseEcho` below
 //
 // From an Android emulator, connect the app to 10.0.2.2 (host loopback).
 // The supported ports and framing are specified in docs/protocol-spec.md.
@@ -33,9 +34,15 @@ const MAGIC = 0x5a;
 const ECHO_IDS = {
   104: 103, // PEQ
   106: 105, // dynamics
+  108: 107, // per-channel bus send
   110: 109, // input channel
   114: 113, // bus output
 };
+
+// Identity fields that must ride along on every echo of an id, even when they did
+// not change: `module_id` everywhere, plus the bus for a `107` (one channel has
+// nine independent sends, so the bus is part of what the event addresses).
+const ECHO_IDENTITY_FIELDS = { 107: [1, 2] };
 
 const controlPort = Number(process.env.DM20_CONTROL_PORT || 6400);
 const meterPort = Number(process.env.DM20_METER_PORT || 6401);
@@ -151,14 +158,53 @@ function outputPart(moduleId, fader, pan, mute, solo) {
     bool(6, true),
   ]);
 }
-function channel(moduleId, name, fader, pan, mute, solo) {
+function channel(moduleId, name) {
   return msg([
     i32(1, moduleId),
     str(2, name),
-    bytes(4, eqPart(moduleId)),
-    bytes(5, dynamicPart(moduleId)),
-    bytes(7, outputPart(moduleId, fader, pan, mute, solo)),
+    bytes(4, storedPart(103, moduleId)),
+    bytes(5, storedPart(105, moduleId)),
+    bytes(6, busSendPart(moduleId)),
+    bytes(7, storedPart(109, moduleId)),
   ]);
+}
+
+// ---------------------------------------------------------------- bus sends
+// `ModuleConst.BusCommandId.BusParam1..8` and `BusParamSM`, the order the original
+// client assigns to `MicInBusSendModel`'s bus1..bus8 + busLnR (spec §5.1.1). The
+// desk echoes one bus of one channel per change event, addressed by that id.
+const SEND_PARAM_IDS = [168, 176, 184, 192, 680, 688, 696, 704, 1192];
+
+function busSend(moduleId, slot, enable, prefader, gain, pan) {
+  return msg([
+    i32(1, moduleId),
+    i32(2, SEND_PARAM_IDS[slot]),
+    bool(3, enable),
+    bool(4, prefader),
+    f32(5, gain),
+    f32(6, pan),
+  ]);
+}
+
+/** A deterministic, plausible send: the first two buses and L/R open, one pre-fader. */
+function sendState(moduleId, slot) {
+  return {
+    enable: slot < 2 || slot === 8,
+    prefader: slot === 1,
+    gain: 480 + ((moduleId * 37 + slot * 61) % 260),
+    pan: ((moduleId + slot) % 5 - 2) * 10,
+  };
+}
+
+// MicInChannelModel field 6 is the whole MicInBusSendModel, one sub-message per bus.
+// Each sub-message is read back from the stored send, so a snapshot taken after a
+// change agrees with the sparse events that describe it.
+function busSendPart(moduleId) {
+  const parts = [i32(1, moduleId)];
+  for (let slot = 0; slot < SEND_PARAM_IDS.length; slot++) {
+    parts.push(bytes(2 + slot, storedPart(107, moduleId, SEND_PARAM_IDS[slot])));
+  }
+  return msg(parts);
 }
 // EqPartModel: four flattened bands (high/highMid/lowMid/low x freq/gain/Q),
 // selectedEq (15), selectedLibIndex (16), highType (17), lowType (18).
@@ -195,12 +241,12 @@ function busOutput(moduleId, gain, pan, mute, solo) {
     bool(8, false),
   ]);
 }
-function outBus(index, name, gain, pan) {
+function outBus(index, name) {
   const moduleId = 128 + index;
   return msg([
     i32(1, moduleId),
     str(2, name),
-    bytes(6, busOutput(moduleId, gain, pan, false, false)),
+    bytes(6, storedPart(113, moduleId)),
   ]);
 }
 
@@ -249,19 +295,13 @@ function busState(b) {
 }
 
 function buildSnapshot() {
-  const in1 = msg(INPUT_NAMES.slice(0, 8).map((n, i) => {
-    const s = inputState(i);
-    return bytes(i + 1, channel(i, n, s.fader, s.pan, s.mute, s.solo));
-  }));
-  const in2 = msg(INPUT_NAMES.slice(8, 12).map((n, i) => {
-    const s = inputState(8 + i);
-    return bytes(i + 1, channel(8 + i, n, s.fader, s.pan, s.mute, s.solo));
-  }));
+  const in1 = msg(INPUT_NAMES.slice(0, 8).map((n, i) =>
+    bytes(i + 1, channel(i, n))));
+  const in2 = msg(INPUT_NAMES.slice(8, 12).map((n, i) =>
+    bytes(i + 1, channel(8 + i, n))));
 
-  const bus = msg([1,2,3,4,5,6,7,8].map(b => {
-    const s = busState(b);
-    return bytes(b, outBus(b - 1, 'BUS ' + b, s.gain, s.pan));
-  }));
+  const bus = msg([1,2,3,4,5,6,7,8].map(b =>
+    bytes(b, outBus(b - 1, 'BUS ' + b))));
 
   // SetupInfo holds a selector tag (1) followed by the proto3-agnostic fields.
   const info = msg([
@@ -341,10 +381,31 @@ function applyTransport(fields) {
 // always carried every field and could never reproduce the defect that hid
 // behind that for months — a client replacing its model from a sparse event
 // wipes everything the event left out (reported as "mute drops by itself").
-const echoState = new Map(); // "<echoProtoId>:<moduleId>" -> { field: { wt, raw } }
+const echoState = new Map(); // "<echoProtoId>:<moduleId>[:<busParamId>]" -> { field: { wt, raw } }
 
-function seedEcho(echoId, moduleId, model) {
-  echoState.set(echoId + ':' + moduleId, parseRawFields(model));
+function echoKey(echoId, moduleId, busParamId) {
+  return busParamId === undefined
+    ? echoId + ':' + moduleId
+    : echoId + ':' + moduleId + ':' + busParamId;
+}
+function seedEcho(echoId, moduleId, model, busParamId) {
+  echoState.set(echoKey(echoId, moduleId, busParamId), parseRawFields(model));
+}
+
+/**
+ * A stored model, re-emitted as a protobuf message body.
+ *
+ * The snapshot is built from these rather than from the seed constants, so a client
+ * that reconnects after some changes sees exactly what the echoes have been saying.
+ * Keeping two sources would let the mock describe a bus as on while its echo of the
+ * "turn it off" command carries no change at all — an event the real desk, which has
+ * one state, can never send.
+ */
+function storedPart(echoId, moduleId, busParamId) {
+  const fields = echoState.get(echoKey(echoId, moduleId, busParamId)) || {};
+  return Buffer.concat(
+    Object.keys(fields).sort((a, b) => a - b).map((f) => fields[f].raw),
+  );
 }
 function seedEchoState() {
   for (let i = 0; i < 12; i++) {
@@ -352,6 +413,14 @@ function seedEchoState() {
     seedEcho(109, i, outputPart(i, s.fader, s.pan, s.mute, s.solo));
     seedEcho(103, i, eqPart(i));
     seedEcho(105, i, dynamicPart(i));
+    for (let slot = 0; slot < SEND_PARAM_IDS.length; slot++) {
+      const send = sendState(i, slot);
+      seedEcho(
+        107, i,
+        busSend(i, slot, send.enable, send.prefader, send.gain, send.pan),
+        SEND_PARAM_IDS[slot],
+      );
+    }
   }
   for (let b = 1; b <= 8; b++) {
     const s = busState(b);
@@ -364,16 +433,16 @@ seedEchoState();
  * Diffs a command against the stored model and returns the sparse event to echo.
  *
  * Rules, all taken from the capture (`wire-20261018-102004.log`):
- *  - `module_id` rides along on every observed event, changed or not, because an
- *    event without one decodes as module 0 and would retarget the wrong channel.
+ *  - The identity fields of the event ride along whether they changed or not
+ *    (`ECHO_IDENTITY_FIELDS`), because an event without them decodes as module 0
+ *    and would retarget the wrong channel — or, on a `107`, the wrong bus.
  *  - Anything else is included only when its bytes differ from the stored value.
  *  - The stored model is updated with everything the command carried, so the
  *    next diff starts from what the console now believes.
  */
-function sparseEcho(echoId, moduleId, payload) {
-  const key = echoId + ':' + moduleId;
-  const stored = echoState.get(key);
-  if (!stored) return payload; // unknown module: fall back to mirroring
+function sparseEcho(echoId, moduleId, payload, busParamId) {
+  const stored = echoState.get(echoKey(echoId, moduleId, busParamId));
+  if (!stored) return payload; // unknown model: fall back to mirroring
   const incoming = parseRawFields(payload);
   const out = [];
   for (const f of Object.keys(incoming).sort((a, b) => a - b)) {
@@ -382,11 +451,11 @@ function sparseEcho(echoId, moduleId, payload) {
     if (!prev || !prev.raw.equals(now.raw)) out.push(now.raw);
     stored[f] = now;
   }
-  const moduleIdField = incoming[1];
-  if (moduleIdField && !out.some((b) => b.equals(moduleIdField.raw))) {
-    out.unshift(moduleIdField.raw);
-  }
-  return Buffer.concat(out);
+  const identity = (ECHO_IDENTITY_FIELDS[echoId] || [1])
+    .map((f) => incoming[f])
+    .filter((field) => field && !out.some((b) => b.equals(field.raw)))
+    .map((field) => field.raw);
+  return Buffer.concat([...identity, ...out]);
 }
 
 const controlServer = net.createServer((socket) => {
@@ -425,6 +494,8 @@ const controlServer = net.createServer((socket) => {
       try { fields = parseFields(payload); } catch (e) { /* not a message we log deeply */ }
       const detail = protoId === 110
         ? `moduleId=${fields[1] ?? 0} fader=${fields[5] ?? 0} pan=${fields[2] ?? 0} mute=${!!fields[4]} solo=${!!fields[3]}`
+        : protoId === 108
+        ? `moduleId=${fields[1] ?? 0} busParam=${fields[2] ?? 0} on=${!!fields[3]} pre=${!!fields[4]} gain=${fields[5] ?? 0} pan=${fields[6] ?? 0}`
         : protoId === 114
         ? `moduleId=${fields[1] ?? 0} gain=${fields[7] ?? 0} pan=${fields[6] ?? 0} mute=${!!fields[3]} solo=${!!fields[2]}`
         : protoId === 104
@@ -448,7 +519,8 @@ const controlServer = net.createServer((socket) => {
       // that actually moved (§4.1).
       const echoId = ECHO_IDS[protoId];
       if (echoId) {
-        const echoPayload = sparseEcho(echoId, fields[1] ?? 0, payload);
+        const busParamId = echoId === 107 ? fields[2] : undefined;
+        const echoPayload = sparseEcho(echoId, fields[1] ?? 0, payload, busParamId);
         socket.write(controlFrame(echoId, echoPayload));
         console.log(`[control] -> echo protoId ${echoId} (${echoPayload.length} B, ${payload.length} B command)`);
       }

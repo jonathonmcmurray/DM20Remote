@@ -2,7 +2,7 @@ package com.dm20remote.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -168,8 +168,8 @@ fun Dm20Switch(
  * The header's segmented switch: a rounded track holding one pill per option.
  *
  * It is used twice — the four-way tab switch in the console header and the
- * three-way Channel/PEQ/Dynamics switch on the detail pages — so the item width
- * is a parameter (62 dp and 84 dp in the design).
+ * four-way Channel/PEQ/Dynamics/Sends switch on the input detail pages — so the
+ * item width is a parameter (62 dp and 72 dp in the design).
  */
 @Composable
 fun SegmentedSwitch(
@@ -220,6 +220,10 @@ fun SegmentedSwitch(
  * invoked during the gesture, throttled so a drag does not flood the console with
  * a command per touch sample. Bipolar parameters pass [detent] so the fill grows
  * out of the centre and a centre mark is drawn.
+ *
+ * Only horizontal drags are taken: a vertical swipe over a slider must still
+ * scroll the page it sits on (the sends table is taller than the screen), and a
+ * drag gesture that consumed every direction would never let the parent see it.
  */
 @Composable
 fun Dm20Slider(
@@ -244,21 +248,20 @@ fun Dm20Slider(
                 if (enabled) {
                     Modifier
                         .pointerInput(Unit) {
-                            detectDragGestures(
+                            detectHorizontalDragGestures(
                                 onDragEnd = { onCommit() },
                                 onDragCancel = { onCommit() },
-                                onDrag = { change, drag ->
-                                    change.consume()
-                                    val delta = drag.x / width * 1000f
-                                    val next = (current.value + delta).coerceIn(0f, 1000f)
-                                    onTravelChange(next)
-                                    val now = System.nanoTime()
-                                    if (now - lastDragEmit >= DRAG_EMIT_NS) {
-                                        lastDragEmit = now
-                                        onDrag(next)
-                                    }
-                                },
-                            )
+                            ) { change, drag ->
+                                change.consume()
+                                val delta = drag / width * 1000f
+                                val next = (current.value + delta).coerceIn(0f, 1000f)
+                                onTravelChange(next)
+                                val now = System.nanoTime()
+                                if (now - lastDragEmit >= DRAG_EMIT_NS) {
+                                    lastDragEmit = now
+                                    onDrag(next)
+                                }
+                            }
                         }
                         .pointerInput(Unit) {
                             detectTapGestures { offset ->

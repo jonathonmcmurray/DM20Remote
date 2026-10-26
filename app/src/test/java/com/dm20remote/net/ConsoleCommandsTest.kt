@@ -2,6 +2,7 @@ package com.dm20remote.net
 
 import com.dm20remote.proto.BusOutputModel
 import com.dm20remote.proto.EqPartModel
+import com.dm20remote.proto.MicInBusModel
 import com.dm20remote.proto.MicInDynamicPartModel
 import com.dm20remote.proto.MicInOutputPartModel
 import com.dm20remote.proto.PlayCommand
@@ -252,6 +253,81 @@ class ConsoleCommandsTest {
         val empty = MicInDynamicPartModel.getDefaultInstance()
         assertEquals(12, ConsoleCommands.gateThreshold(empty, 12, -40f).moduleId)
         assertEquals(15, ConsoleCommands.compressorEnable(empty, 15, true).moduleId)
+    }
+
+    // ---- bus sends ---------------------------------------------------------
+    //
+    // One send = one slot of one channel's MicInBusSendModel, addressed by
+    // (moduleId, busParamId). Like every other command, it must carry the whole
+    // slot state and the identity of the send it means.
+
+    private val fullSend = MicInBusModel.newBuilder()
+        .setModuleId(5)
+        .setBusParamId(688)
+        .setIsBusEnable(true)
+        .setIsPrefader(true)
+        .setGainValue(500f)
+        .setPanValue(-25f)
+        .build()
+
+    @Test
+    fun `bus send enable keeps the level pan and pre-fader`() {
+        val updated = ConsoleCommands.busSendEnable(fullSend, 5, 5, false)
+        assertFalse(updated.isBusEnable)
+        assertTrue(updated.isPrefader)
+        assertEquals(500f, updated.gainValue, 0f)
+        assertEquals(-25f, updated.panValue, 0f)
+        assertEquals(5, updated.moduleId)
+        assertEquals(688, updated.busParamId)
+    }
+
+    @Test
+    fun `bus send pre-fader keeps the level pan and enable`() {
+        val updated = ConsoleCommands.busSendPrefader(fullSend, 5, 5, false)
+        assertFalse(updated.isPrefader)
+        assertTrue(updated.isBusEnable)
+        assertEquals(500f, updated.gainValue, 0f)
+        assertEquals(-25f, updated.panValue, 0f)
+    }
+
+    @Test
+    fun `bus send level and pan each move one field`() {
+        val gain = ConsoleCommands.busSendGain(fullSend, 5, 5, 755f)
+        assertEquals(755f, gain.gainValue, 0f)
+        assertEquals(-25f, gain.panValue, 0f)
+        assertTrue(gain.isBusEnable)
+        assertTrue(gain.isPrefader)
+
+        val pan = ConsoleCommands.busSendPan(fullSend, 5, 5, 40f)
+        assertEquals(40f, pan.panValue, 0f)
+        assertEquals(500f, pan.gainValue, 0f)
+        assertTrue(pan.isPrefader)
+    }
+
+    @Test
+    fun `bus send commands set both identity fields when the base was never seen`() {
+        val empty = MicInBusModel.getDefaultInstance()
+
+        val gain = ConsoleCommands.busSendGain(empty, 12, 5, 750f)
+        assertEquals(12, gain.moduleId)
+        assertEquals(688, gain.busParamId)
+        assertEquals(750f, gain.gainValue, 0f)
+        assertFalse(gain.isBusEnable)
+
+        val lr = ConsoleCommands.busSendPan(empty, 3, BusSends.LR, 45f)
+        assertEquals(3, lr.moduleId)
+        assertEquals(1192, lr.busParamId)
+        assertEquals(45f, lr.panValue, 0f)
+    }
+
+    @Test
+    fun `bus send commands use the recovered parameter for the slot`() {
+        val empty = MicInBusModel.getDefaultInstance()
+        assertEquals(168, ConsoleCommands.busSendEnable(empty, 1, 0, true).busParamId)
+        assertEquals(192, ConsoleCommands.busSendEnable(empty, 1, 3, true).busParamId)
+        assertEquals(680, ConsoleCommands.busSendEnable(empty, 1, 4, true).busParamId)
+        assertEquals(704, ConsoleCommands.busSendEnable(empty, 1, 7, true).busParamId)
+        assertEquals(1192, ConsoleCommands.busSendEnable(empty, 1, BusSends.LR, true).busParamId)
     }
 
     // ---- transport / recorder ----------------------------------------------

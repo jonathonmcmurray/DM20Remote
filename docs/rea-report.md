@@ -249,8 +249,8 @@ The recorder tab does not use the `Command`/`EnmCommand` messages. Its UI (`Reco
 `MainActivity.sendCommand(Object)` → `SendCommandManager.send192Command(model)` sends
 `model.getProtoModel()`, which is a **`PlayCommand`** — the same message the console echoes on `191`/`195`.
 So protoId `192` on the wire is a `PlayCommand`, not the `MainRecorderItemModel` the method signature
-suggests (`BusParam4`, presumed `192` from the method name; the `ModuleConst` field *values* are not
-exposed by the DEX).
+suggests (`BusParam4 = 192`; the `ModuleConst` field *values* are not exposed by the **Java** DEX API, but
+they are readable from the encoded static-field arrays — see `protocol-spec.md` §5.1.1).
 
 The ad-hoc `instruction` values (from `RecorderView.onClick` / `startAndPause` / `selectPlay`) are
 `1` = select a file by `songPath` (also used for previous/next, picked client-side from the last `193`

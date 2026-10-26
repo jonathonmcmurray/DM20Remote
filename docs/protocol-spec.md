@@ -271,13 +271,75 @@ schema stays byte-compatible with the console.
 The `102–128` even range is also used for scene/name/library commands via
 `SendCommandManager.sendChangeNameCommand`, `sendDataCommonCommand`, `sendFxLibCommand`, `sendScensCommand`.
 
+#### 5.1.1 `busParamId` → bus-slot mapping (recovered)
+
+`MicInBusModel.bus_param_id` identifies **which bus** a bus-send belongs to; `module_id` identifies
+**which input channel**. Both `107` (console → client) and `108` (client → console) carry a *single*
+`MicInBusModel`, but the snapshot (`busSendPartModel`) carries all nine slots as a fixed message, so a
+standalone event has to be folded into the matching slot — and the fold key is `bus_param_id`.
+
+The values are `ModuleConst.BusCommandId` constants, read straight out of the shipped
+`DM20_1.0.3_APKPure.apk` (`classes.dex`, encoded static field values of `ModuleConst$BusCommandId`):
+
+```
+BusParam1 = 168   BusParam2 = 176   BusParam3 = 184   BusParam4 = 192
+BusParam5 = 680   BusParam6 = 688   BusParam7 = 696   BusParam8 = 704
+BusParamSM = 1192
+```
+
+| `bus_param_id` | Slot in `MicInBusSendModel` | Bus module id (`ModuleConst$Bus`) |
+|---|---|---|
+| `168` | `bus1` | `128` |
+| `176` | `bus2` | `129` |
+| `184` | `bus3` | `130` |
+| `192` | `bus4` | `131` |
+| `680` | `bus5` | `132` |
+| `688` | `bus6` | `133` |
+| `696` | `bus7` | `134` |
+| `704` | `bus8` | `135` |
+| `1192` | `busLnR` (stereo L/R master) | `255` |
+
+The assignment is not inferred — it is written out in the original app's own constructor
+`MicInBusSendModel(int moduleId)`:
+
+```java
+this.Bus1    = new MicInBusModel(moduleId, ModuleConst.BusCommandId.BusParam1);
+...
+this.Bus8    = new MicInBusModel(moduleId, ModuleConst.BusCommandId.BusParam8);
+this.LnRBus  = new MicInBusModel(moduleId, ModuleConst.BusCommandId.BusParamSM);
+```
+
+and the fold matches on exactly that field, in `IN1View.setBusSendViewData`:
+
+```java
+for (BusChildModel busChildModel : this.checkedModel.busitemses.childs) {
+    if (busChildModel.micInBusModel.getBusCommandId() == micInBusModel.getBusCommandId()) {
+        busChildModel.micInBusModel.setModel(micInBusModel);   // fold by bus, not by position
+    }
+}
+```
+
+Corroborated by hardware: every `107` in `wire-20261018-102004.log` carries one of `680`, `688`, `696`
+(226 frames; only the buses in use were touched), and the same `bus_param_id` recurs across many
+`module_id`s — which is what a *bus* identity must look like. The `moduleId` is the global 0-based channel
+index (`ModuleConst$CH.CH1 = 0`); `IN1View` holds channels 0–7 (IN1) and 8–15 (IN2) and normalises
+with `if (channelId >= 8) channelId -= 8`.
+
+Two consequences for a client:
+
+- `MicInBusModel.setModel`/`copyModel` copy only `gainValue`, `panValue`, `isBusEnable` and `isPrefader`
+  — never `moduleId` or `busParamId`. Those two identify the slot and are fixed, so a fold must not
+  overwrite them from an incoming event that omitted them (see §4.1).
+- Do **not** fold by iteration order or by `bus1…bus8` position. Match on `bus_param_id`; an unknown
+  value is a bus this client does not model and should be ignored rather than mis-slotted.
+
 ### 5.3 Transport / recorder commands (protoId `192`)
 
 `SendCommandManager.send192Command(MainRecorderItemModel)` calls
 `sendCommand(ModuleConst.BusCommandId.BusParam4, model.getProtoModel())`, and `getProtoModel()` returns a
 **`PlayCommand`** — the *same* message the console echoes on `191`/`195`. The wire payload is therefore the
-`PlayCommand`, **not** the UI-level `MainRecorderItemModel`. (`BusParam4` is presumed `192` from the
-`send192Command` name; the `ModuleConst` constants are not exposed as field values in the DEX.)
+`PlayCommand`, **not** the UI-level `MainRecorderItemModel`. (`BusParam4 = 192` — confirmed, not presumed:
+the constant is read out of the shipped DEX in §5.1.1, matching the `send192Command` name.)
 
 The original `RecorderView` edits a single `instruction` field on the last `PlayCommand` the console
 reported and re-sends the **whole** message, exactly like the channel edits in §4. The recovered values
@@ -469,11 +531,17 @@ Any local app can bind and drive the mixer or subscribe to state.
   the *message type* still wants a hardware confirmation (issue #5).
 - ✅ **Outbound transport payload** — see §5.3. protoId `192` carries a `PlayCommand` (not the wire model the
   method name suggests), and the `instruction` / `EnmPlayMode` values used by the recorder UI are recovered.
-  What a real console sends on the music channel *and* the literal `BusParam4` value still want hardware. 
+  The `BusParam4` value behind the `send192Command` name is now recovered too: `ModuleConst.BusCommandId`
+  gives `BusParam4 = 192`, confirming the protoId — see §5.1.1. What a real console sends on the music
+  channel still wants hardware.
 - ✅ **Command acknowledgement** — see §4.1 and §10.1. **There is no `CommandResult` on the wire**: the
   54-minute hardware capture contains zero occurrences, consistent with there being no handler in the
   recovered `CmdHandler.processCommand` dispatch. Change events (the odd protoIds) are the only ack, and
   they are *sparse*. A command that changes nothing is still acknowledged — with a `module_id`-only event.
+- ✅ **`busParamId` → bus-slot mapping** — see §5.1.1. Recovered from the shipped APK's DEX, not inferred:
+  `ModuleConst.BusCommandId` gives `BusParam1…8 = 168/176/184/192/680/688/696/704` and
+  `BusParamSM = 1192`, assigned literally by `MicInBusSendModel(int moduleId)`. The fold key is
+  `bus_param_id` (`IN1View.setBusSendViewData`), corroborated by every `107` in the hardware capture.
 
 **Still open (all non-blocking for a basic client):**
 

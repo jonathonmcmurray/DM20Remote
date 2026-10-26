@@ -1,6 +1,7 @@
 package com.dm20remote.model
 
 import com.dm20remote.net.ConsoleEvent
+import com.dm20remote.net.folded
 import com.dm20remote.net.Inbound
 import com.dm20remote.net.ProtoIds
 import com.dm20remote.proto.PlayCommand
@@ -74,6 +75,16 @@ class ConsoleStore {
                 val model = inbound.model
                 if (model.hasModuleId()) {
                     updateInput(model.moduleId) { it.copy(dynamics = it.dynamics.mergeWith(model)) }
+                }
+            }
+
+            // A bus send is addressed by (module_id, bus_param_id): the event names
+            // one channel *and* one bus, so it has to be folded into that slot of the
+            // stored MicInBusSendModel rather than replacing the whole thing.
+            is Inbound.MicBusPart -> {
+                val model = inbound.model
+                if (model.hasModuleId() && model.hasBusParamId()) {
+                    updateInput(model.moduleId) { it.copy(busSend = it.busSend.folded(model)) }
                 }
             }
 
